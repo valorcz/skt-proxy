@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  skt-proxy:
+    build: .
+    container_name: skt-proxy
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - SKT_USERNAME=your_username_here
+      - SKT_PASSWORD=your_password_here
+    volumes:
+      - ./downloads:/app/downloads
+      - ./seen_ids.txt:/app/seen_ids.txt

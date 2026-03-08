@@ -1,19 +1,37 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SkT Proxy | Modern Index</title>
+    <title>SkT Proxy</title>
     <style>
         :root {
-            --bg-color: #121212;
-            --surface-color: #1e1e1e;
-            --primary-color: #3CA0B8;
-            --text-main: #ffffff;
-            --text-muted: #a0a0a0;
-            --seed-color: #4ade80;
-            --leech-color: #f87171;
-            --radius: 8px;
+            --bg-color: #0f172a;
+            --surface-color: #1e293b;
+            --primary-color: #0ea5e9;
+            --primary-glow: rgba(14, 165, 233, 0.4);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --seed-color: #22c55e;
+            --leech-color: #ef4444;
+            --new-color: #f59e0b;
+            --border-color: rgba(255, 255, 255, 0.1);
+            --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            --hover-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 0 20px var(--primary-glow);
+            --radius: 12px;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        [data-theme="light"] {
+            --bg-color: #f8fafc;
+            --surface-color: #ffffff;
+            --primary-color: #0284c7;
+            --primary-glow: rgba(2, 132, 199, 0.3);
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border-color: rgba(0, 0, 0, 0.1);
+            --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            --hover-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 0 20px var(--primary-glow);
         }
 
         body {
@@ -23,6 +41,7 @@
             margin: 0;
             padding: 2rem;
             line-height: 1.5;
+            transition: background-color 0.3s, color 0.3s;
         }
 
         header {
@@ -31,63 +50,116 @@
             align-items: center;
             margin-bottom: 2rem;
             padding-bottom: 1rem;
-            border-bottom: 1px solid #333;
+            border-bottom: 1px solid var(--border-color);
+            flex-wrap: wrap;
+            gap: 1rem;
         }
 
-        input[type="text"] {
+        h1 {
+            margin: 0;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            text-shadow: 0 0 10px var(--primary-glow);
+        }
+
+        .controls {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        input[type="text"], select {
             padding: 0.75rem 1rem;
             border-radius: var(--radius);
-            border: 1px solid #333;
+            border: 1px solid var(--border-color);
             background: var(--surface-color);
             color: var(--text-main);
-            width: 300px;
+            outline: none;
+            transition: var(--transition);
+        }
+
+        input[type="text"]:focus, select:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 10px var(--primary-glow);
+        }
+
+        input[type="text"] { width: 250px; }
+
+        .theme-toggle {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 0.75rem;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .theme-toggle:hover {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 10px var(--primary-glow);
         }
 
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 1.5rem;
+            gap: 2rem;
+            margin-bottom: 3rem;
         }
 
         .card {
             background-color: var(--surface-color);
             border-radius: var(--radius);
+            border: 1px solid var(--border-color);
             overflow: hidden;
             display: flex;
             flex-direction: column;
-            transition: transform 0.2s;
+            transition: var(--transition);
+            box-shadow: var(--card-shadow);
+            position: relative;
         }
 
         .card:hover {
-            transform: translateY(-4px);
+            transform: translateY(-8px);
+            box-shadow: var(--hover-shadow);
+            border-color: var(--primary-color);
         }
 
         .card-img {
             width: 100%;
-            height: 350px;
+            height: 380px;
             object-fit: cover;
-            background: #2a2a2a;
+            background: var(--bg-color);
+            transition: var(--transition);
+        }
+
+        .card:hover .card-img {
+            opacity: 0.9;
         }
 
         .card-content {
-            padding: 1rem;
+            padding: 1.25rem;
             display: flex;
             flex-direction: column;
             flex-grow: 1;
         }
 
         .title {
-            font-size: 1rem;
-            font-weight: 600;
-            margin: 0 0 0.5rem 0;
+            font-size: 1.05rem;
+            font-weight: 700;
+            margin: 0 0 0.75rem 0;
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
             overflow: hidden;
+            line-height: 1.3;
         }
 
         .meta {
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             color: var(--text-muted);
             margin-bottom: 1rem;
             display: flex;
@@ -96,36 +168,77 @@
         }
 
         .badge {
-            background: #333;
-            padding: 0.2rem 0.5rem;
-            border-radius: 4px;
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            padding: 0.25rem 0.6rem;
+            border-radius: 6px;
+            font-weight: 500;
+        }
+
+        .badge.new {
+            background: var(--new-color);
+            color: #fff;
+            border-color: var(--new-color);
+            box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
         }
 
         .stats {
             display: flex;
-            gap: 1rem;
-            font-size: 0.85rem;
-            margin-bottom: 1rem;
+            gap: 1.25rem;
+            font-size: 0.9rem;
+            margin-bottom: 1.25rem;
             margin-top: auto;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
         }
 
-        .seed { color: var(--seed-color); font-weight: bold; }
-        .leech { color: var(--leech-color); font-weight: bold; }
+        .seed { color: var(--seed-color); font-weight: 700; }
+        .leech { color: var(--leech-color); font-weight: 700; }
 
-        .download-btn {
+        .btn {
             display: block;
             text-align: center;
             background-color: var(--primary-color);
             color: white;
             text-decoration: none;
-            padding: 0.75rem;
+            padding: 0.85rem;
             border-radius: var(--radius);
             font-weight: 600;
-            transition: opacity 0.2s;
+            cursor: pointer;
+            border: none;
+            width: 100%;
+            transition: var(--transition);
+            box-sizing: border-box;
         }
 
-        .download-btn:hover {
-            opacity: 0.9;
+        .btn:hover {
+            background-color: #0284c7;
+            box-shadow: 0 0 15px var(--primary-glow);
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background-color: var(--surface-color);
+            border: 1px solid var(--border-color);
+            margin-top: 0.5rem;
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--border-color);
+            box-shadow: none;
+        }
+        
+        .btn:disabled { 
+            opacity: 0.5; 
+            cursor: not-allowed; 
+            transform: none; 
+            box-shadow: none; 
+        }
+        
+        #loadMoreContainer {
+            text-align: center;
+            max-width: 300px;
+            margin: 0 auto;
         }
     </style>
 </head>
@@ -133,16 +246,31 @@
 
     <header>
         <h1>SkT Proxy</h1>
-        <input type="text" id="searchInput" placeholder="Search torrents..." onkeyup="filterTorrents()">
+        <div class="controls">
+            <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle Light/Dark Mode">
+                🌓
+            </button>
+            <select id="categorySelect" onchange="changeCategory()">
+                <option value="0" {% if current_category == '0' %}selected{% endif %}>All Categories</option>
+                <option value="1" {% if current_category == '1' %}selected{% endif %}>Filmy CZ/SK</option>
+                <option value="19" {% if current_category == '19' %}selected{% endif %}>HD Filmy</option>
+                <option value="43" {% if current_category == '43' %}selected{% endif %}>UHD Filmy</option>
+                <option value="16" {% if current_category == '16' %}selected{% endif %}>Seriály</option>
+                <option value="44" {% if current_category == '44' %}selected{% endif %}>Sport</option>
+                <option value="18" {% if current_category == '18' %}selected{% endif %}>Hry na Windows</option>
+            </select>
+            <input type="text" id="searchInput" placeholder="Search loaded items..." onkeyup="filterTorrents()">
+        </div>
     </header>
 
     <main class="grid" id="torrentGrid">
         {% for torrent in torrents %}
         <article class="card">
-            <img class="card-img" src="{{ torrent.image_url }}" alt="Cover" loading="lazy" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiMyYTJBMmEiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZmlsbD0iIzU1NSIgZHk9Ii4zZW0iIHRleHQtYW5jaG9yPSJtaWRkbGUiPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg=='">
+            <img class="card-img" src="{{ torrent.image_url }}" alt="Cover" loading="lazy" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiN0cmFuc3BhcmVudCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmaWxsPSIjOTRhM2I4IiBkeT0iLjNlbSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+Tm8gSW1hZ2U8L3RleHQ+PC9zdmc+'">
             <div class="card-content">
                 <h2 class="title" title="{{ torrent.title }}">{{ torrent.title }}</h2>
                 <div class="meta">
+                    {% if torrent.is_new %}<span class="badge new">NEW</span>{% endif %}
                     <span class="badge">{{ torrent.category }}</span>
                     <span class="badge">{{ torrent.size }}</span>
                     <span class="badge">{{ torrent.added_date }}</span>
@@ -151,25 +279,145 @@
                     <span class="seed">▲ {{ torrent.seeders }}</span>
                     <span class="leech">▼ {{ torrent.leechers }}</span>
                 </div>
-                <a href="{{ torrent.download_link }}" class="download-btn">Download .torrent</a>
+                <a href="{{ torrent.download_link }}" class="btn">Download .torrent</a>
+                {% if can_use_nas %}
+                <button onclick="sendToNas('{{ torrent.id }}', '{{ torrent.download_link.split('&f=')[1] }}', this)" class="btn btn-secondary">Send to NAS</button>
+                {% endif %}
             </div>
         </article>
         {% endfor %}
     </main>
 
+    <div id="loadMoreContainer">
+        <button id="loadMoreBtn" class="btn" onclick="loadMore()">Load More</button>
+    </div>
+
     <script>
+        // Theme Management
+        const htmlEl = document.documentElement;
+        const savedTheme = localStorage.getItem('skt_theme');
+        if (savedTheme) {
+            htmlEl.setAttribute('data-theme', savedTheme);
+        } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+            htmlEl.setAttribute('data-theme', 'light');
+        }
+
+        function toggleTheme() {
+            const currentTheme = htmlEl.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            htmlEl.setAttribute('data-theme', newTheme);
+            localStorage.setItem('skt_theme', newTheme);
+        }
+
+        let currentPage = 0;
+
+        function changeCategory() {
+            const cat = document.getElementById('categorySelect').value;
+            window.location.href = '/?category=' + cat;
+        }
+
         function filterTorrents() {
             const input = document.getElementById('searchInput').value.toLowerCase();
             const cards = document.getElementsByClassName('card');
 
             for (let i = 0; i < cards.length; i++) {
                 const title = cards[i].querySelector('.title').innerText.toLowerCase();
-                if (title.includes(input)) {
-                    cards[i].style.display = "";
-                } else {
-                    cards[i].style.display = "none";
-                }
+                cards[i].style.display = title.includes(input) ? "" : "none";
             }
+        }
+
+        async function loadMore() {
+            const btn = document.getElementById('loadMoreBtn');
+            const cat = document.getElementById('categorySelect').value;
+            const grid = document.getElementById('torrentGrid');
+            
+            btn.disabled = true;
+            btn.innerText = "Loading...";
+            currentPage++;
+
+            try {
+                const response = await fetch(`/api/torrents?page=${currentPage}&category=${cat}`);
+                const data = await response.json();
+                const torrents = data.torrents;
+                const userCanUseNas = data.can_use_nas;
+
+                if (torrents.length === 0) {
+                    btn.innerText = "No more items";
+                    return;
+                }
+
+                torrents.forEach(t => {
+                    const article = document.createElement('article');
+                    article.className = 'card';
+                    let newBadge = t.is_new ? '<span class="badge new">NEW</span>' : '';
+                    let encodedTitle = t.download_link.split('&f=')[1];
+                    let nasButton = userCanUseNas ? `<button onclick="sendToNas('${t.id}', '${encodedTitle}', this)" class="btn btn-secondary">Send to NAS</button>` : '';
+                    
+                    article.innerHTML = `
+                        <img class="card-img" src="${t.image_url}" loading="lazy" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiN0cmFuc3BhcmVudCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmaWxsPSIjOTRhM2I4IiBkeT0iLjNlbSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+Tm8gSW1hZ2U8L3RleHQ+PC9zdmc+'">
+                        <div class="card-content">
+                            <h2 class="title" title="${t.title}">${t.title}</h2>
+                            <div class="meta">
+                                ${newBadge}
+                                <span class="badge">${t.category}</span>
+                                <span class="badge">${t.size}</span>
+                                <span class="badge">${t.added_date}</span>
+                            </div>
+                            <div class="stats">
+                                <span class="seed">▲ ${t.seeders}</span>
+                                <span class="leech">▼ ${t.leechers}</span>
+                            </div>
+                            <a href="${t.download_link}" class="btn">Download .torrent</a>
+                            ${nasButton}
+                        </div>
+                    `;
+                    grid.appendChild(article);
+                });
+
+                filterTorrents();
+                btn.disabled = false;
+                btn.innerText = "Load More";
+                
+            } catch (error) {
+                console.error("Failed to load more:", error);
+                btn.innerText = "Error loading. Try again.";
+                btn.disabled = false;
+            }
+        }
+
+        async function sendToNas(id, f, btnElement) {
+            const originalText = btnElement.innerText;
+            btnElement.innerText = "Sending...";
+            btnElement.disabled = true;
+
+            try {
+                const response = await fetch('/api/send_to_nas', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: id, f: f })
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    btnElement.innerText = "Sent!";
+                    btnElement.style.backgroundColor = "var(--seed-color)";
+                    btnElement.style.color = "#fff";
+                } else {
+                    alert("Failed: " + result.error);
+                    btnElement.innerText = "Error";
+                }
+            } catch (error) {
+                alert("Network error: " + error);
+                btnElement.innerText = originalText;
+            }
+            
+            setTimeout(() => {
+                if(btnElement.innerText === "Sent!") {
+                    btnElement.innerText = originalText;
+                    btnElement.style.backgroundColor = "";
+                    btnElement.disabled = false;
+                }
+            }, 3000);
         }
     </script>
 </body>
