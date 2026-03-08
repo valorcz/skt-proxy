@@ -1,8 +1,9 @@
 import re
 import urllib.parse
 import os
+import io
 import requests
-from flask import Flask, render_template
+from flask import Flask, render_template, request, send_file
 from bs4 import BeautifulSoup
 
 app = Flask(__name__)
@@ -19,7 +20,6 @@ skt_session.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; 
 
 
 def ensure_login():
-    """Ensure the session is authenticated."""
     cookies = skt_session.cookies.get_dict()
     if "pass" in cookies or "uid" in cookies:
         return True
@@ -65,7 +65,9 @@ def parse_torrents(html_content):
 
         formatted_title = title.replace(" ", "_") + ".torrent"
         encoded_title = urllib.parse.quote(formatted_title)
-        download_link = f"https://sktorrent.eu/torrent/download.php?id={torrent_id}&f={encoded_title}&seed=0"
+
+        # Route through our Flask proxy instead of the external URL
+        download_link = f"/proxy_download?id={torrent_id}&f={encoded_title}"
 
         td_text = parent_td.get_text(separator=" ")
 
@@ -100,7 +102,7 @@ def parse_torrents(html_content):
 @app.route("/")
 def index():
     if not ensure_login():
-        return "Authentication failed. Check server console for details.", 401
+        return "Authentication failed. Check server console.", 401
 
     try:
         response = skt_session.get(INDEX_URL, timeout=10)
@@ -113,7 +115,50 @@ def index():
     return render_template("index.html", torrents=torrents)
 
 
+@app.route("/proxy_download")
+def proxy_download():
+    if not ensure_login():
+        return "Authentication failed.", 401
+
+    torrent_id = request.args.get("id")
+    filename = request.args.get("f")
+
+    if not torrent_id or not filename:
+        return "Missing parameters", 400
+
+    # Request the file from the tracker
+    remote_url = (
+        f"https://sktorrent.eu/torrent/download.php?id={torrent_id}&f={filename}&seed=0"
+    )
+    resp = skt_session.get(remote_url)
+
+    if (
+        resp.status_code == 200
+        and "bittorrent" in resp.headers.get("Content-Type", "").lower()
+    ):
+        # Save to local server directory
+        os.makedirs("downloads", exist_ok=True)
+        safe_filename = "".join(
+            c
+            for c in urllib.parse.unquote(filename)
+            if c.isalnum() or c in (" ", ".", "-", "_")
+        )
+        local_path = os.path.join("downloads", safe_filename)
+
+        with open(local_path, "wb") as f:
+            f.write(resp.content)
+
+        # Serve the file directly to the user's browser through the Flask app
+        return send_file(
+            io.BytesIO(resp.content),
+            as_attachment=True,
+            download_name=safe_filename,
+            mimetype="application/x-bittorrent",
+        )
+    else:
+        return f"Failed to download from tracker. Status: {resp.status_code}", 502
+
+
 if __name__ == "__main__":
-    # Log in immediately on startup to verify credentials
     ensure_login()
     app.run(debug=True, port=5000)
