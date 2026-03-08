@@ -6,50 +6,56 @@
     <title>SkT Proxy</title>
     <style>
         :root {
-            --bg-color: #0f172a;
-            --surface-color: #1e293b;
-            --primary-color: #0ea5e9;
-            --primary-glow: rgba(14, 165, 233, 0.4);
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --seed-color: #22c55e;
+            /* Vercel/ChatGPT Dark Theme */
+            --bg-color: #000000;
+            --surface-color: #000000;
+            --surface-hover: #0a0a0a;
+            --primary-color: #ffffff;
+            --primary-invert: #000000;
+            --text-main: #ededed;
+            --text-muted: #a1a1aa;
+            --border-color: #27272a;
+            --border-hover: #3f3f46;
+            --seed-color: #10b981;
             --leech-color: #ef4444;
-            --new-color: #f59e0b;
-            --border-color: rgba(255, 255, 255, 0.1);
-            --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
-            --hover-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 0 20px var(--primary-glow);
-            --radius: 12px;
-            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            --new-bg: #3f3f46;
+            --new-text: #ffffff;
+            --radius: 8px;
+            --transition: all 0.2s ease;
         }
 
         [data-theme="light"] {
-            --bg-color: #f8fafc;
+            /* Vercel/ChatGPT Light Theme */
+            --bg-color: #ffffff;
             --surface-color: #ffffff;
-            --primary-color: #0284c7;
-            --primary-glow: rgba(2, 132, 199, 0.3);
-            --text-main: #0f172a;
-            --text-muted: #64748b;
-            --border-color: rgba(0, 0, 0, 0.1);
-            --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-            --hover-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 0 20px var(--primary-glow);
+            --surface-hover: #fcfcfc;
+            --primary-color: #000000;
+            --primary-invert: #ffffff;
+            --text-main: #171717;
+            --text-muted: #71717a;
+            --border-color: #e4e4e7;
+            --border-hover: #d4d4d8;
+            --new-bg: #e4e4e7;
+            --new-text: #000000;
         }
 
         body {
-            font-family: system-ui, -apple-system, sans-serif;
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-main);
             margin: 0;
             padding: 2rem;
             line-height: 1.5;
-            transition: background-color 0.3s, color 0.3s;
+            -webkit-font-smoothing: antialiased;
+            transition: background-color var(--transition), color var(--transition);
         }
 
         header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 2rem;
-            padding-bottom: 1rem;
+            margin-bottom: 3rem;
+            padding-bottom: 1.5rem;
             border-bottom: 1px solid var(--border-color);
             flex-wrap: wrap;
             gap: 1rem;
@@ -57,20 +63,21 @@
 
         h1 {
             margin: 0;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-            text-shadow: 0 0 10px var(--primary-glow);
+            font-weight: 600;
+            font-size: 1.5rem;
+            letter-spacing: -0.025em;
         }
 
         .controls {
             display: flex;
-            gap: 1rem;
+            gap: 0.75rem;
             align-items: center;
         }
 
-        input[type="text"], select {
-            padding: 0.75rem 1rem;
-            border-radius: var(--radius);
+        input[type="text"], select, .theme-toggle {
+            padding: 0.5rem 0.75rem;
+            font-size: 0.875rem;
+            border-radius: 6px;
             border: 1px solid var(--border-color);
             background: var(--surface-color);
             color: var(--text-main);
@@ -78,35 +85,17 @@
             transition: var(--transition);
         }
 
-        input[type="text"]:focus, select:focus {
-            border-color: var(--primary-color);
-            box-shadow: 0 0 10px var(--primary-glow);
+        input[type="text"]:focus, select:focus, .theme-toggle:hover {
+            border-color: var(--border-hover);
         }
 
-        input[type="text"] { width: 250px; }
-
-        .theme-toggle {
-            background: var(--surface-color);
-            border: 1px solid var(--border-color);
-            color: var(--text-main);
-            padding: 0.75rem;
-            border-radius: var(--radius);
-            cursor: pointer;
-            transition: var(--transition);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .theme-toggle:hover {
-            border-color: var(--primary-color);
-            box-shadow: 0 0 10px var(--primary-glow);
-        }
+        input[type="text"] { width: 220px; }
+        .theme-toggle { cursor: pointer; display: flex; align-items: center; justify-content: center;}
 
         .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 2rem;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 1.5rem;
             margin-bottom: 3rem;
         }
 
@@ -118,27 +107,24 @@
             display: flex;
             flex-direction: column;
             transition: var(--transition);
-            box-shadow: var(--card-shadow);
-            position: relative;
         }
 
         .card:hover {
-            transform: translateY(-8px);
-            box-shadow: var(--hover-shadow);
-            border-color: var(--primary-color);
+            border-color: var(--border-hover);
+            background-color: var(--surface-hover);
+            transform: translateY(-2px);
         }
 
         .card-img {
             width: 100%;
-            height: 380px;
+            height: 340px;
             object-fit: cover;
             background: var(--bg-color);
-            transition: var(--transition);
+            border-bottom: 1px solid var(--border-color);
+            transition: opacity var(--transition);
         }
 
-        .card:hover .card-img {
-            opacity: 0.9;
-        }
+        .card:hover .card-img { opacity: 0.9; }
 
         .card-content {
             padding: 1.25rem;
@@ -148,98 +134,89 @@
         }
 
         .title {
-            font-size: 1.05rem;
-            font-weight: 700;
+            font-size: 1rem;
+            font-weight: 500;
             margin: 0 0 0.75rem 0;
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
             overflow: hidden;
-            line-height: 1.3;
+            line-height: 1.4;
+            letter-spacing: -0.01em;
         }
 
         .meta {
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             color: var(--text-muted);
             margin-bottom: 1rem;
             display: flex;
             flex-wrap: wrap;
-            gap: 0.5rem;
+            gap: 0.4rem;
         }
 
         .badge {
-            background: var(--bg-color);
+            background: transparent;
             border: 1px solid var(--border-color);
-            padding: 0.25rem 0.6rem;
-            border-radius: 6px;
-            font-weight: 500;
+            padding: 0.1rem 0.5rem;
+            border-radius: 9999px; /* Pill shape */
         }
 
         .badge.new {
-            background: var(--new-color);
-            color: #fff;
-            border-color: var(--new-color);
-            box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+            background: var(--new-bg);
+            color: var(--new-text);
+            border-color: var(--new-bg);
+            font-weight: 500;
         }
 
         .stats {
             display: flex;
-            gap: 1.25rem;
-            font-size: 0.9rem;
+            gap: 1rem;
+            font-size: 0.8rem;
             margin-bottom: 1.25rem;
             margin-top: auto;
             padding-top: 1rem;
-            border-top: 1px solid var(--border-color);
         }
 
-        .seed { color: var(--seed-color); font-weight: 700; }
-        .leech { color: var(--leech-color); font-weight: 700; }
+        .seed { color: var(--seed-color); }
+        .leech { color: var(--leech-color); }
 
         .btn {
             display: block;
             text-align: center;
             background-color: var(--primary-color);
-            color: white;
+            color: var(--primary-invert);
             text-decoration: none;
-            padding: 0.85rem;
-            border-radius: var(--radius);
-            font-weight: 600;
+            padding: 0.6rem;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-weight: 500;
             cursor: pointer;
-            border: none;
+            border: 1px solid var(--primary-color);
             width: 100%;
             transition: var(--transition);
             box-sizing: border-box;
         }
 
-        .btn:hover {
-            background-color: #0284c7;
-            box-shadow: 0 0 15px var(--primary-glow);
-            transform: translateY(-2px);
-        }
+        .btn:hover { opacity: 0.9; }
 
         .btn-secondary {
-            background-color: var(--surface-color);
+            background-color: transparent;
+            color: var(--text-main);
             border: 1px solid var(--border-color);
             margin-top: 0.5rem;
         }
 
         .btn-secondary:hover {
-            background-color: var(--border-color);
-            box-shadow: none;
+            background-color: var(--surface-hover);
+            border-color: var(--border-hover);
         }
         
         .btn:disabled { 
             opacity: 0.5; 
             cursor: not-allowed; 
-            transform: none; 
-            box-shadow: none; 
         }
         
-        #loadMoreContainer {
-            text-align: center;
-            max-width: 300px;
-            margin: 0 auto;
-        }
+        #loadMoreContainer { text-align: center; max-width: 200px; margin: 0 auto; }
     </style>
 </head>
 <body>
@@ -247,9 +224,7 @@
     <header>
         <h1>SkT Proxy</h1>
         <div class="controls">
-            <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle Light/Dark Mode">
-                🌓
-            </button>
+            <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle Theme">🌓</button>
             <select id="categorySelect" onchange="changeCategory()">
                 <option value="0" {% if current_category == '0' %}selected{% endif %}>All Categories</option>
                 <option value="1" {% if current_category == '1' %}selected{% endif %}>Filmy CZ/SK</option>
@@ -259,18 +234,18 @@
                 <option value="44" {% if current_category == '44' %}selected{% endif %}>Sport</option>
                 <option value="18" {% if current_category == '18' %}selected{% endif %}>Hry na Windows</option>
             </select>
-            <input type="text" id="searchInput" placeholder="Search loaded items..." onkeyup="filterTorrents()">
+            <input type="text" id="searchInput" placeholder="Search..." onkeyup="filterTorrents()">
         </div>
     </header>
 
     <main class="grid" id="torrentGrid">
         {% for torrent in torrents %}
         <article class="card">
-            <img class="card-img" src="{{ torrent.image_url }}" alt="Cover" loading="lazy" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiN0cmFuc3BhcmVudCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmaWxsPSIjOTRhM2I4IiBkeT0iLjNlbSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+Tm8gSW1hZ2U8L3RleHQ+PC9zdmc+'">
+            <img class="card-img" src="{{ torrent.display_image }}" alt="Cover" loading="lazy" onerror="this.style.display='none'">
             <div class="card-content">
                 <h2 class="title" title="{{ torrent.title }}">{{ torrent.title }}</h2>
                 <div class="meta">
-                    {% if torrent.is_new %}<span class="badge new">NEW</span>{% endif %}
+                    {% if torrent.is_new %}<span class="badge new">New</span>{% endif %}
                     <span class="badge">{{ torrent.category }}</span>
                     <span class="badge">{{ torrent.size }}</span>
                     <span class="badge">{{ torrent.added_date }}</span>
@@ -279,7 +254,7 @@
                     <span class="seed">▲ {{ torrent.seeders }}</span>
                     <span class="leech">▼ {{ torrent.leechers }}</span>
                 </div>
-                <a href="{{ torrent.download_link }}" class="btn">Download .torrent</a>
+                <a href="{{ torrent.download_link }}" class="btn">Download</a>
                 {% if can_use_nas %}
                 <button onclick="sendToNas('{{ torrent.id }}', '{{ torrent.download_link.split('&f=')[1] }}', this)" class="btn btn-secondary">Send to NAS</button>
                 {% endif %}
@@ -289,11 +264,10 @@
     </main>
 
     <div id="loadMoreContainer">
-        <button id="loadMoreBtn" class="btn" onclick="loadMore()">Load More</button>
+        <button id="loadMoreBtn" class="btn btn-secondary" onclick="loadMore()">Load More</button>
     </div>
 
     <script>
-        // Theme Management
         const htmlEl = document.documentElement;
         const savedTheme = localStorage.getItem('skt_theme');
         if (savedTheme) {
@@ -303,8 +277,7 @@
         }
 
         function toggleTheme() {
-            const currentTheme = htmlEl.getAttribute('data-theme');
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            const newTheme = htmlEl.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
             htmlEl.setAttribute('data-theme', newTheme);
             localStorage.setItem('skt_theme', newTheme);
         }
@@ -312,14 +285,12 @@
         let currentPage = 0;
 
         function changeCategory() {
-            const cat = document.getElementById('categorySelect').value;
-            window.location.href = '/?category=' + cat;
+            window.location.href = '/?category=' + document.getElementById('categorySelect').value;
         }
 
         function filterTorrents() {
             const input = document.getElementById('searchInput').value.toLowerCase();
             const cards = document.getElementsByClassName('card');
-
             for (let i = 0; i < cards.length; i++) {
                 const title = cards[i].querySelector('.title').innerText.toLowerCase();
                 cards[i].style.display = title.includes(input) ? "" : "none";
@@ -338,23 +309,21 @@
             try {
                 const response = await fetch(`/api/torrents?page=${currentPage}&category=${cat}`);
                 const data = await response.json();
-                const torrents = data.torrents;
-                const userCanUseNas = data.can_use_nas;
-
-                if (torrents.length === 0) {
+                
+                if (data.torrents.length === 0) {
                     btn.innerText = "No more items";
                     return;
                 }
 
-                torrents.forEach(t => {
+                data.torrents.forEach(t => {
                     const article = document.createElement('article');
                     article.className = 'card';
-                    let newBadge = t.is_new ? '<span class="badge new">NEW</span>' : '';
+                    let newBadge = t.is_new ? '<span class="badge new">New</span>' : '';
                     let encodedTitle = t.download_link.split('&f=')[1];
-                    let nasButton = userCanUseNas ? `<button onclick="sendToNas('${t.id}', '${encodedTitle}', this)" class="btn btn-secondary">Send to NAS</button>` : '';
+                    let nasButton = data.can_use_nas ? `<button onclick="sendToNas('${t.id}', '${encodedTitle}', this)" class="btn btn-secondary">Send to NAS</button>` : '';
                     
                     article.innerHTML = `
-                        <img class="card-img" src="${t.image_url}" loading="lazy" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiN0cmFuc3BhcmVudCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmaWxsPSIjOTRhM2I4IiBkeT0iLjNlbSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+Tm8gSW1hZ2U8L3RleHQ+PC9zdmc+'">
+                        <img class="card-img" src="${t.display_image}" loading="lazy" onerror="this.style.display='none'">
                         <div class="card-content">
                             <h2 class="title" title="${t.title}">${t.title}</h2>
                             <div class="meta">
@@ -367,7 +336,7 @@
                                 <span class="seed">▲ ${t.seeders}</span>
                                 <span class="leech">▼ ${t.leechers}</span>
                             </div>
-                            <a href="${t.download_link}" class="btn">Download .torrent</a>
+                            <a href="${t.download_link}" class="btn">Download</a>
                             ${nasButton}
                         </div>
                     `;
@@ -379,8 +348,7 @@
                 btn.innerText = "Load More";
                 
             } catch (error) {
-                console.error("Failed to load more:", error);
-                btn.innerText = "Error loading. Try again.";
+                btn.innerText = "Error loading";
                 btn.disabled = false;
             }
         }
@@ -399,9 +367,9 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    btnElement.innerText = "Sent!";
-                    btnElement.style.backgroundColor = "var(--seed-color)";
-                    btnElement.style.color = "#fff";
+                    btnElement.innerText = "Sent";
+                    btnElement.style.borderColor = "var(--seed-color)";
+                    btnElement.style.color = "var(--seed-color)";
                 } else {
                     alert("Failed: " + result.error);
                     btnElement.innerText = "Error";
@@ -412,9 +380,10 @@
             }
             
             setTimeout(() => {
-                if(btnElement.innerText === "Sent!") {
+                if(btnElement.innerText === "Sent") {
                     btnElement.innerText = originalText;
-                    btnElement.style.backgroundColor = "";
+                    btnElement.style.borderColor = "";
+                    btnElement.style.color = "";
                     btnElement.disabled = false;
                 }
             }, 3000);
