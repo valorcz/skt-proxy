@@ -6,7 +6,6 @@
     <title>SkT Proxy</title>
     <style>
         :root {
-            /* Vercel/ChatGPT Dark Theme */
             --bg-color: #000000;
             --surface-color: #000000;
             --surface-hover: #0a0a0a;
@@ -25,7 +24,6 @@
         }
 
         [data-theme="light"] {
-            /* Vercel/ChatGPT Light Theme */
             --bg-color: #ffffff;
             --surface-color: #ffffff;
             --surface-hover: #fcfcfc;
@@ -54,43 +52,84 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 3rem;
+            margin-bottom: 2rem;
             padding-bottom: 1.5rem;
             border-bottom: 1px solid var(--border-color);
             flex-wrap: wrap;
             gap: 1rem;
         }
 
-        h1 {
-            margin: 0;
-            font-weight: 600;
-            font-size: 1.5rem;
-            letter-spacing: -0.025em;
+        h1 { margin: 0; font-weight: 600; font-size: 1.5rem; letter-spacing: -0.025em; }
+
+        .controls { display: flex; gap: 0.75rem; align-items: center; }
+
+        input[type="text"], .theme-toggle {
+            padding: 0.5rem 0.75rem; font-size: 0.875rem; border-radius: 6px;
+            border: 1px solid var(--border-color); background: var(--surface-color);
+            color: var(--text-main); outline: none; transition: var(--transition);
         }
 
-        .controls {
+        input[type="text"]:focus, .theme-toggle:hover { border-color: var(--border-hover); }
+        input[type="text"] { width: 220px; }
+        .theme-toggle { cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+        /* Filter Pills */
+        .filters-container {
             display: flex;
-            gap: 0.75rem;
+            flex-direction: column;
+            gap: 1rem;
+            margin-bottom: 2.5rem;
+        }
+
+        .filter-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.6rem;
             align-items: center;
         }
 
-        input[type="text"], select, .theme-toggle {
-            padding: 0.5rem 0.75rem;
-            font-size: 0.875rem;
-            border-radius: 6px;
-            border: 1px solid var(--border-color);
+        .filter-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-right: 0.5rem;
+            font-weight: 500;
+        }
+
+        .pill {
             background: var(--surface-color);
+            border: 1px solid var(--border-color);
             color: var(--text-main);
-            outline: none;
+            padding: 0.4rem 0.8rem;
+            border-radius: 9999px;
+            cursor: pointer;
+            font-size: 0.85rem;
             transition: var(--transition);
+            user-select: none;
         }
 
-        input[type="text"]:focus, select:focus, .theme-toggle:hover {
-            border-color: var(--border-hover);
+        .pill:hover { border-color: var(--border-hover); }
+        
+        .pill.active {
+            background: var(--primary-color);
+            color: var(--primary-invert);
+            border-color: var(--primary-color);
         }
 
-        input[type="text"] { width: 220px; }
-        .theme-toggle { cursor: pointer; display: flex; align-items: center; justify-content: center;}
+        /* Dropdown for Genres */
+        .dropdown { position: relative; display: inline-block; }
+        .dropdown-content {
+            display: none; position: absolute; background: var(--surface-color);
+            min-width: 220px; max-height: 350px; overflow-y: auto;
+            border: 1px solid var(--border-color); border-radius: var(--radius);
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); z-index: 10;
+            padding: 0.8rem; top: 110%; left: 0;
+            flex-direction: column; gap: 0.5rem;
+        }
+        .dropdown-content.show { display: flex; }
+        .dropdown-label {
+            display: flex; align-items: center; gap: 0.6rem; 
+            font-size: 0.85rem; cursor: pointer; color: var(--text-main);
+        }
 
         .grid {
             display: grid;
@@ -100,123 +139,71 @@
         }
 
         .card {
-            background-color: var(--surface-color);
-            border-radius: var(--radius);
-            border: 1px solid var(--border-color);
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            transition: var(--transition);
+            background-color: var(--surface-color); border-radius: var(--radius);
+            border: 1px solid var(--border-color); overflow: hidden;
+            display: flex; flex-direction: column; transition: var(--transition);
         }
-
         .card:hover {
-            border-color: var(--border-hover);
-            background-color: var(--surface-hover);
+            border-color: var(--border-hover); background-color: var(--surface-hover);
             transform: translateY(-2px);
         }
-
         .card-img {
-            width: 100%;
-            height: 340px;
-            object-fit: cover;
-            background: var(--bg-color);
-            border-bottom: 1px solid var(--border-color);
+            width: 100%; height: 340px; object-fit: cover;
+            background: var(--bg-color); border-bottom: 1px solid var(--border-color);
             transition: opacity var(--transition);
         }
-
         .card:hover .card-img { opacity: 0.9; }
 
-        .card-content {
-            padding: 1.25rem;
-            display: flex;
-            flex-direction: column;
-            flex-grow: 1;
-        }
-
+        .card-content { padding: 1.25rem; display: flex; flex-direction: column; flex-grow: 1; }
         .title {
-            font-size: 1rem;
-            font-weight: 500;
-            margin: 0 0 0.75rem 0;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-            line-height: 1.4;
-            letter-spacing: -0.01em;
+            font-size: 1rem; font-weight: 500; margin: 0 0 0.75rem 0;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+            overflow: hidden; line-height: 1.4; letter-spacing: -0.01em;
         }
 
         .meta {
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            margin-bottom: 1rem;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.4rem;
+            font-size: 0.75rem; color: var(--text-muted); margin-bottom: 1rem;
+            display: flex; flex-wrap: wrap; gap: 0.4rem;
         }
-
         .badge {
-            background: transparent;
-            border: 1px solid var(--border-color);
-            padding: 0.1rem 0.5rem;
-            border-radius: 9999px; /* Pill shape */
+            background: transparent; border: 1px solid var(--border-color);
+            padding: 0.1rem 0.5rem; border-radius: 9999px;
         }
-
-        .badge.new {
-            background: var(--new-bg);
-            color: var(--new-text);
-            border-color: var(--new-bg);
-            font-weight: 500;
-        }
+        .badge.new { background: var(--new-bg); color: var(--new-text); border-color: var(--new-bg); font-weight: 500; }
 
         .stats {
-            display: flex;
-            gap: 1rem;
-            font-size: 0.8rem;
-            margin-bottom: 1.25rem;
-            margin-top: auto;
-            padding-top: 1rem;
+            display: flex; gap: 1rem; font-size: 0.8rem; margin-bottom: 1rem;
+            margin-top: auto; padding-top: 1rem;
         }
-
         .seed { color: var(--seed-color); }
         .leech { color: var(--leech-color); }
 
         .btn {
-            display: block;
-            text-align: center;
-            background-color: var(--primary-color);
-            color: var(--primary-invert);
-            text-decoration: none;
-            padding: 0.6rem;
-            border-radius: 6px;
-            font-size: 0.875rem;
-            font-weight: 500;
-            cursor: pointer;
-            border: 1px solid var(--primary-color);
-            width: 100%;
-            transition: var(--transition);
+            display: flex; align-items: center; justify-content: center; text-align: center;
+            background-color: var(--primary-color); color: var(--primary-invert);
+            text-decoration: none; padding: 0.6rem 0.75rem; border-radius: 6px;
+            font-size: 0.875rem; font-weight: 500; cursor: pointer;
+            border: 1px solid var(--primary-color); width: 100%; transition: var(--transition);
             box-sizing: border-box;
         }
-
         .btn:hover { opacity: 0.9; }
-
         .btn-secondary {
-            background-color: transparent;
-            color: var(--text-main);
+            background-color: transparent; color: var(--text-main);
             border: 1px solid var(--border-color);
-            margin-top: 0.5rem;
         }
+        .btn-secondary:hover { background-color: var(--surface-hover); border-color: var(--border-hover); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .action-stack { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
+        .action-row { display: flex; gap: 0.5rem; }
 
-        .btn-secondary:hover {
-            background-color: var(--surface-hover);
-            border-color: var(--border-hover);
-        }
-        
-        .btn:disabled { 
-            opacity: 0.5; 
-            cursor: not-allowed; 
-        }
-        
         #loadMoreContainer { text-align: center; max-width: 200px; margin: 0 auto; }
+        
+        .skeleton {
+            background: var(--border-color); height: 340px; width: 100%;
+            animation: pulse 1.5s infinite ease-in-out;
+        }
+        @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
     </style>
 </head>
 <body>
@@ -225,49 +212,35 @@
         <h1>SkT Proxy</h1>
         <div class="controls">
             <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle Theme">🌓</button>
-            <select id="categorySelect" onchange="changeCategory()">
-                <option value="0" {% if current_category == '0' %}selected{% endif %}>All Categories</option>
-                <option value="1" {% if current_category == '1' %}selected{% endif %}>Filmy CZ/SK</option>
-                <option value="19" {% if current_category == '19' %}selected{% endif %}>HD Filmy</option>
-                <option value="43" {% if current_category == '43' %}selected{% endif %}>UHD Filmy</option>
-                <option value="16" {% if current_category == '16' %}selected{% endif %}>Seriály</option>
-                <option value="44" {% if current_category == '44' %}selected{% endif %}>Sport</option>
-                <option value="18" {% if current_category == '18' %}selected{% endif %}>Hry na Windows</option>
-            </select>
-            <input type="text" id="searchInput" placeholder="Search..." onkeyup="filterTorrents()">
+            <input type="text" id="searchInput" placeholder="Search loaded..." onkeyup="filterLocalTorrents()">
         </div>
     </header>
 
-    <main class="grid" id="torrentGrid">
-        {% for torrent in torrents %}
-        <article class="card">
-            <img class="card-img" src="{{ torrent.display_image }}" alt="Cover" loading="lazy" onerror="this.style.display='none'">
-            <div class="card-content">
-                <h2 class="title" title="{{ torrent.title }}">{{ torrent.title }}</h2>
-                <div class="meta">
-                    {% if torrent.is_new %}<span class="badge new">New</span>{% endif %}
-                    <span class="badge">{{ torrent.category }}</span>
-                    <span class="badge">{{ torrent.size }}</span>
-                    <span class="badge">{{ torrent.added_date }}</span>
-                </div>
-                <div class="stats">
-                    <span class="seed">▲ {{ torrent.seeders }}</span>
-                    <span class="leech">▼ {{ torrent.leechers }}</span>
-                </div>
-                <a href="{{ torrent.download_link }}" class="btn">Download</a>
-                {% if can_use_nas %}
-                <button onclick="sendToNas('{{ torrent.id }}', '{{ torrent.download_link.split('&f=')[1] }}', this)" class="btn btn-secondary">Send to NAS</button>
-                {% endif %}
+    <div class="filters-container">
+       <div class="filter-row" id="categoryRow">
+            <span class="filter-label">Categories:</span>
+       </div>
+
+        <div class="filter-row">
+            <span class="filter-label">Genres:</span>
+            <div class="dropdown">
+                <button class="pill" id="genreDropdownBtn" onclick="toggleGenreDropdown()">Select Genres ▾</button>
+                <div class="dropdown-content" id="genreDropdownContent">
+                    </div>
             </div>
-        </article>
-        {% endfor %}
-    </main>
+            <div id="activeGenresContainer" style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-left: 0.5rem;"></div>
+        </div>
+    </div>
+
+    <main class="grid" id="torrentGrid">
+        </main>
 
     <div id="loadMoreContainer">
         <button id="loadMoreBtn" class="btn btn-secondary" onclick="loadMore()">Load More</button>
     </div>
 
     <script>
+        // --- Theme Management ---
         const htmlEl = document.documentElement;
         const savedTheme = localStorage.getItem('skt_theme');
         if (savedTheme) {
@@ -282,13 +255,108 @@
             localStorage.setItem('skt_theme', newTheme);
         }
 
+        // --- State Management ---
+        let selectedCategories = JSON.parse(localStorage.getItem('skt_cats')) || [];
+        let selectedGenres = JSON.parse(localStorage.getItem('skt_genres')) || [];
         let currentPage = 0;
 
-        function changeCategory() {
-            window.location.href = '/?category=' + document.getElementById('categorySelect').value;
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchCategories();
+            fetchGenres();
+            fetchTorrents(true);
+            
+            // Close dropdown if clicked outside
+            window.onclick = function(event) {
+                if (!event.target.matches('#genreDropdownBtn') && !event.target.closest('#genreDropdownContent')) {
+                    document.getElementById("genreDropdownContent").classList.remove('show');
+                }
+            }
+        });
+
+// --- Categories ---
+        async function fetchCategories() {
+            try {
+                const res = await fetch('/api/categories');
+                const categories = await res.json();
+                const container = document.getElementById('categoryRow');
+                
+                categories.forEach(cat => {
+                    const btn = document.createElement('button');
+                    btn.className = 'pill';
+                    btn.setAttribute('data-cat', cat.id);
+                    btn.innerText = cat.name;
+                    
+                    if (selectedCategories.includes(cat.id)) {
+                        btn.classList.add('active');
+                    }
+                    
+                    btn.addEventListener('click', () => {
+                        btn.classList.toggle('active');
+                        if (btn.classList.contains('active')) {
+                            if(!selectedCategories.includes(cat.id)) selectedCategories.push(cat.id);
+                        } else {
+                            selectedCategories = selectedCategories.filter(c => c !== cat.id);
+                        }
+                        localStorage.setItem('skt_cats', JSON.stringify(selectedCategories));
+                        fetchTorrents(true);
+                    });
+                    
+                    container.appendChild(btn);
+                });
+            } catch(e) { console.error("Failed to load categories", e); }
         }
 
-        function filterTorrents() {
+        // --- Genres ---
+        function toggleGenreDropdown() {
+            document.getElementById("genreDropdownContent").classList.toggle("show");
+        }
+
+        async function fetchGenres() {
+            try {
+                const res = await fetch('/api/genres');
+                const genres = await res.json();
+                const container = document.getElementById('genreDropdownContent');
+                
+                genres.forEach(g => {
+                    const isChecked = selectedGenres.includes(g) ? 'checked' : '';
+                    const label = document.createElement('label');
+                    label.className = 'dropdown-label';
+                    label.innerHTML = `<input type="checkbox" value="${g}" ${isChecked} onchange="handleGenreChange(this)"> ${g}`;
+                    container.appendChild(label);
+                });
+                renderActiveGenres();
+            } catch(e) { console.error("Failed to load genres", e); }
+        }
+
+        function handleGenreChange(cb) {
+            if (cb.checked) {
+                if(!selectedGenres.includes(cb.value)) selectedGenres.push(cb.value);
+            } else {
+                selectedGenres = selectedGenres.filter(g => g !== cb.value);
+            }
+            localStorage.setItem('skt_genres', JSON.stringify(selectedGenres));
+            renderActiveGenres();
+            fetchTorrents(true);
+        }
+
+        function renderActiveGenres() {
+            const container = document.getElementById('activeGenresContainer');
+            container.innerHTML = '';
+            selectedGenres.forEach(g => {
+                const pill = document.createElement('span');
+                pill.className = 'pill active';
+                pill.innerHTML = `${g} ✕`;
+                pill.onclick = () => {
+                    document.querySelector(`input[value="${g}"]`).click();
+                };
+                container.appendChild(pill);
+            });
+            document.getElementById('genreDropdownBtn').innerText = selectedGenres.length > 0 ? `Genres (${selectedGenres.length}) ▾` : `Select Genres ▾`;
+        }
+
+        // --- Data Fetching ---
+        function filterLocalTorrents() {
             const input = document.getElementById('searchInput').value.toLowerCase();
             const cards = document.getElementsByClassName('card');
             for (let i = 0; i < cards.length; i++) {
@@ -297,29 +365,44 @@
             }
         }
 
-        async function loadMore() {
-            const btn = document.getElementById('loadMoreBtn');
-            const cat = document.getElementById('categorySelect').value;
+        async function fetchTorrents(reset = false) {
             const grid = document.getElementById('torrentGrid');
+            const btn = document.getElementById('loadMoreBtn');
             
-            btn.disabled = true;
-            btn.innerText = "Loading...";
-            currentPage++;
+            if (reset) {
+                currentPage = 0;
+                grid.innerHTML = '<div class="card"><div class="skeleton"></div></div><div class="card"><div class="skeleton"></div></div><div class="card"><div class="skeleton"></div></div>';
+                btn.style.display = 'none';
+            } else {
+                currentPage++;
+                btn.disabled = true;
+                btn.innerText = "Loading...";
+            }
 
+            const catQuery = selectedCategories.join(',');
+            const genreQuery = selectedGenres.join(',');
+            
             try {
-                const response = await fetch(`/api/torrents?page=${currentPage}&category=${cat}`);
+                const response = await fetch(`/api/torrents?page=${currentPage}&categories=${catQuery}&genres=${genreQuery}`);
                 const data = await response.json();
                 
+                if (reset) grid.innerHTML = '';
+                
                 if (data.torrents.length === 0) {
+                    if (reset) grid.innerHTML = '<p style="color: var(--text-muted); grid-column: 1/-1;">No results found for these filters.</p>';
                     btn.innerText = "No more items";
+                    btn.style.display = reset ? 'none' : 'inline-block';
                     return;
                 }
 
                 data.torrents.forEach(t => {
                     const article = document.createElement('article');
                     article.className = 'card';
+                    
                     let newBadge = t.is_new ? '<span class="badge new">New</span>' : '';
+                    let genreBadge = t.genres ? t.genres.map(g => `<span class="badge">${g}</span>`).join('') : '';
                     let encodedTitle = t.download_link.split('&f=')[1];
+                    let csfdBtn = t.csfd_id ? `<a href="https://www.csfd.cz/film/${t.csfd_id}" target="_blank" class="btn btn-secondary" style="flex: 0 0 auto; width: auto;" title="ČSFD">ČSFD</a>` : '';
                     let nasButton = data.can_use_nas ? `<button onclick="sendToNas('${t.id}', '${encodedTitle}', this)" class="btn btn-secondary">Send to NAS</button>` : '';
                     
                     article.innerHTML = `
@@ -329,6 +412,7 @@
                             <div class="meta">
                                 ${newBadge}
                                 <span class="badge">${t.category}</span>
+                                ${genreBadge}
                                 <span class="badge">${t.size}</span>
                                 <span class="badge">${t.added_date}</span>
                             </div>
@@ -336,14 +420,20 @@
                                 <span class="seed">▲ ${t.seeders}</span>
                                 <span class="leech">▼ ${t.leechers}</span>
                             </div>
-                            <a href="${t.download_link}" class="btn">Download</a>
-                            ${nasButton}
+                            <div class="action-stack">
+                                <div class="action-row">
+                                    <a href="${t.download_link}" class="btn" style="flex: 1;">Download</a>
+                                    ${csfdBtn}
+                                </div>
+                                ${nasButton}
+                            </div>
                         </div>
                     `;
                     grid.appendChild(article);
                 });
 
-                filterTorrents();
+                filterLocalTorrents();
+                btn.style.display = 'inline-block';
                 btn.disabled = false;
                 btn.innerText = "Load More";
                 
@@ -352,6 +442,8 @@
                 btn.disabled = false;
             }
         }
+
+        function loadMore() { fetchTorrents(false); }
 
         async function sendToNas(id, f, btnElement) {
             const originalText = btnElement.innerText;
