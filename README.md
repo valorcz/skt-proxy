@@ -16,3 +16,9 @@ OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES uv run gunicorn --workers=1 --threads=4 
 
 The `OBJC_DISABLE_INITIALIZE_FORK_SAFETY` variable is for `gunicorn` to run well on MacOS.
 
+### Alternative
+
+```bash
+uv run flask --app app run --port 5001 --debug
+```
+
