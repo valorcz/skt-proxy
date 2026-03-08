@@ -6,10 +6,10 @@ build:
 	docker build -t $(IMAGE_NAME) .
 
 run-flask:
-	uv run flask --app app run --debug --host=0.0.0.0 --port=5000
+	uv run flask --app app run --debug --host=0.0.0.0 --port=5002
 
 run-gunicorn:
-	uv run gunicorn --workers=1 --threads=4 --bind=0.0.0.0:5000 --access-logfile - --error-logfile - --log-level debug app:app
+	OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES uv run gunicorn --workers=1 --threads=4 --bind=0.0.0.0:5002 --access-logfile - --error-logfile - --log-level debug app:app
 
 up:
 	docker compose up -d skt-proxy
