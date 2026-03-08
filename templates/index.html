@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkT Proxy | Modern Index</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --surface-color: #1e1e1e;
+            --primary-color: #3CA0B8;
+            --text-main: #ffffff;
+            --text-muted: #a0a0a0;
+            --seed-color: #4ade80;
+            --leech-color: #f87171;
+            --radius: 8px;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 2rem;
+            line-height: 1.5;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #333;
+        }
+
+        input[type="text"] {
+            padding: 0.75rem 1rem;
+            border-radius: var(--radius);
+            border: 1px solid #333;
+            background: var(--surface-color);
+            color: var(--text-main);
+            width: 300px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .card {
+            background-color: var(--surface-color);
+            border-radius: var(--radius);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+        }
+
+        .card-img {
+            width: 100%;
+            height: 350px;
+            object-fit: cover;
+            background: #2a2a2a;
+        }
+
+        .card-content {
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+        }
+
+        .title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin: 0 0 0.5rem 0;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .meta {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .badge {
+            background: #333;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+        }
+
+        .stats {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.85rem;
+            margin-bottom: 1rem;
+            margin-top: auto;
+        }
+
+        .seed { color: var(--seed-color); font-weight: bold; }
+        .leech { color: var(--leech-color); font-weight: bold; }
+
+        .download-btn {
+            display: block;
+            text-align: center;
+            background-color: var(--primary-color);
+            color: white;
+            text-decoration: none;
+            padding: 0.75rem;
+            border-radius: var(--radius);
+            font-weight: 600;
+            transition: opacity 0.2s;
+        }
+
+        .download-btn:hover {
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>SkT Proxy</h1>
+        <input type="text" id="searchInput" placeholder="Search torrents..." onkeyup="filterTorrents()">
+    </header>
+
+    <main class="grid" id="torrentGrid">
+        {% for torrent in torrents %}
+        <article class="card">
+            <img class="card-img" src="{{ torrent.image_url }}" alt="Cover" loading="lazy" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiMyYTJBMmEiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZmlsbD0iIzU1NSIgZHk9Ii4zZW0iIHRleHQtYW5jaG9yPSJtaWRkbGUiPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg=='">
+            <div class="card-content">
+                <h2 class="title" title="{{ torrent.title }}">{{ torrent.title }}</h2>
+                <div class="meta">
+                    <span class="badge">{{ torrent.category }}</span>
+                    <span class="badge">{{ torrent.size }}</span>
+                    <span class="badge">{{ torrent.added_date }}</span>
+                </div>
+                <div class="stats">
+                    <span class="seed">▲ {{ torrent.seeders }}</span>
+                    <span class="leech">▼ {{ torrent.leechers }}</span>
+                </div>
+                <a href="{{ torrent.download_link }}" class="download-btn">Download .torrent</a>
+            </div>
+        </article>
+        {% endfor %}
+    </main>
+
+    <script>
+        function filterTorrents() {
+            const input = document.getElementById('searchInput').value.toLowerCase();
+            const cards = document.getElementsByClassName('card');
+
+            for (let i = 0; i < cards.length; i++) {
+                const title = cards[i].querySelector('.title').innerText.toLowerCase();
+                if (title.includes(input)) {
+                    cards[i].style.display = "";
+                } else {
+                    cards[i].style.display = "none";
+                }
+            }
+        }
+    </script>
+</body>
+</html>
