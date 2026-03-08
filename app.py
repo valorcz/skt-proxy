@@ -25,6 +25,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
+if "gunicorn" in os.environ.get("SERVER_SOFTWARE", "") or __name__ != "__main__":
+    gunicorn_logger = logging.getLogger("gunicorn.error")
+    logger.handlers = gunicorn_logger.handlers
+    logger.setLevel(gunicorn_logger.level)
+
 app = Flask(__name__)
 
 # --- CONFIGURATION ---

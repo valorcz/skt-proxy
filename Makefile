@@ -9,7 +9,7 @@ run-flask:
 	uv run flask --app app run --debug --host=0.0.0.0 --port=5000
 
 run-gunicorn:
-	uv run gunicorn --workers=1 --threads=4 --bind=0.0.0.0:5000 app:app
+	uv run gunicorn --workers=1 --threads=4 --bind=0.0.0.0:5000 --access-logfile - --error-logfile - --log-level debug app:app
 
 up:
 	docker compose up -d skt-proxy

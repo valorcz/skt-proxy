@@ -26,4 +26,4 @@ ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 5000
 
 # Start Gunicorn (single worker, multiple threads for SQLite/memory safety)
-CMD ["gunicorn", "--workers=1", "--threads=4", "--bind=0.0.0.0:5000", "app:app"]
+CMD ["gunicorn", "--workers=1", "--threads=4", "--bind=0.0.0.0:5000", "--access-logfile", "-", "--error-logfile", "-", "--log-level", "info", "app:app"]c
