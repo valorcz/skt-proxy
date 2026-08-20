@@ -166,6 +166,8 @@
         .meta { font-size: 0.725rem; color: var(--text-muted); margin-bottom: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
         .badge { background: rgba(var(--surface-rgb), 0.6); border: 1px solid var(--border-color); padding: 0.15rem 0.5rem; border-radius: 6px; backdrop-filter: blur(4px); text-decoration: none; color: inherit; }
         .badge.new { background: var(--brand-gradient); color: var(--primary-invert); border: none; font-weight: 600; }
+        .badge.lang { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); font-weight: 600; }
+        .badge.skt { background: rgba(139, 92, 246, 0.15); color: #c084fc; border: 1px solid rgba(139, 92, 246, 0.35); font-weight: 600; }
 
         .stats { display: flex; gap: 0.85rem; font-size: 0.775rem; margin-bottom: 0.75rem; margin-top: auto; padding-top: 0.65rem; font-weight: 600; border-top: 1px dashed var(--border-color); }
         .seed { color: var(--seed-color); display: inline-flex; align-items: center; gap: 0.2rem; }
@@ -186,13 +188,15 @@
         .btn:hover { background-position: right center; transform: scale(1.02); box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25); }
         
         .btn-secondary { background: rgba(var(--surface-rgb), 0.6); color: var(--text-main); border: 1px solid var(--border-color); font-weight: 500; backdrop-filter: blur(4px); }
-        .btn-secondary:hover { background: var(--surface-hover); border-color: rgba(99, 102, 241, 0.4); transform: scale(1.02); }
+        .btn-secondary:hover:not(:disabled) { background: var(--surface-hover); border-color: rgba(99, 102, 241, 0.4); transform: scale(1.02); }
         .btn-csfd { background: rgba(225, 29, 72, 0.15); color: #f43f5e; border: 1px solid rgba(225, 29, 72, 0.35); font-weight: 600; }
         .btn-csfd:hover { background: rgba(225, 29, 72, 0.3); border-color: #f43f5e; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+        .btn-book { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); font-weight: 600; }
+        .btn-book:hover { background: rgba(16, 185, 129, 0.3); border-color: #34d399; }
+        .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; box-shadow: none; filter: grayscale(80%); }
         
         .action-stack { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.35rem; }
-        .action-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.35rem; }
+        .action-grid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 0.35rem; }
 
         #loadMoreContainer { text-align: center; max-width: 200px; margin: 0 auto; }
         
@@ -245,6 +249,19 @@
 
         .trailer-container { margin-bottom: 1.15rem; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 8px; border: 1px solid var(--border-color); }
         .trailer-container iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
+
+        .related-box {
+            background: rgba(var(--surface-rgb), 0.4); border: 1px solid var(--border-color);
+            border-radius: 8px; padding: 0.75rem 0.85rem; margin-bottom: 1.15rem;
+            display: flex; flex-direction: column; gap: 0.5rem;
+        }
+        .related-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.4rem 0.6rem; border-radius: 6px; background: rgba(0,0,0,0.2);
+            border: 1px solid var(--border-color); gap: 0.5rem; font-size: 0.825rem;
+        }
+        .related-item-title { flex: 1; word-break: break-word; font-weight: 500; }
+        .related-actions { display: flex; gap: 0.3rem; flex-shrink: 0; }
 
         .files-header { font-weight: 600; font-size: 0.9rem; margin-bottom: 0.45rem; color: var(--text-main); }
         .files-list { list-style: none; padding: 0; margin: 0; font-family: monospace; font-size: 0.8rem; background: rgba(var(--surface-rgb), 0.3); border: 1px solid var(--border-color); border-radius: 8px; max-height: 180px; overflow-y: auto; }
@@ -310,13 +327,17 @@
     </div>
 
     <script>
-        // --- Monocolored Vector Icons (FontAwesome style) ---
+        // --- Monocolored Vector Icons ---
         const ICONS = {
             download: `<svg class="stroke-icon" width="14" height="14" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
             info: `<svg class="stroke-icon" width="14" height="14" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`,
             csfd: `<svg class="stroke-icon" width="14" height="14" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+            book: `<svg class="stroke-icon" width="14" height="14" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`,
+            music: `<svg class="stroke-icon" width="14" height="14" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`,
             star: `<svg class="btn-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
             nas: `<svg class="stroke-icon" width="14" height="14" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>`,
+            globe: `<svg class="stroke-icon" width="14" height="14" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10z"/></svg>`,
+            copy: `<svg class="stroke-icon" width="14" height="14" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
             seed: `<svg class="stroke-icon" width="12" height="12" viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg>`,
             leech: `<svg class="stroke-icon" width="12" height="12" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>`
         };
@@ -538,6 +559,7 @@
                     
                     let newBadge = t.is_new ? '<span class="badge new">New</span>' : '';
                     let genreBadge = t.genres ? t.genres.map(g => `<span class="badge">${g}</span>`).join('') : '';
+                    let langBadges = t.languages ? t.languages.map(l => `<span class="badge lang">${l}</span>`).join('') : '';
                     let encodedTitle = t.download_link.includes('&f=') ? t.download_link.split('&f=')[1] : '';
                     
                     let scoreVal = t.csfd_score || '';
@@ -549,9 +571,28 @@
                         csfdOverlayBadge = `<a href="${csfdHref}" ${csfdTarget} class="csfd-overlay-badge ${scoreClass}" title="ČSFD Score: ${scoreVal}">${ICONS.star} ${scoreVal}</a>`;
                     }
 
-                    let csfdActionBtn = t.csfd_id ? `<a href="https://www.csfd.cz/film/${t.csfd_id}" target="_blank" class="btn btn-csfd" title="Open on ČSFD.cz">${ICONS.csfd} ${scoreVal || 'ČSFD'}</a>` : '';
-                    let nasButton = data.can_use_nas ? `<button data-id="${t.id}" data-filename="${encodedTitle}" onclick="sendToNas(this)" class="btn btn-secondary">${ICONS.nas} NAS</button>` : '';
+                    // --- STABLE BUTTON SLOTS (2x2 Grid) ---
+                    // Slot 1 (Top-Left): Download
+                    let btnSlot1 = `<a href="${t.download_link}" class="btn">${ICONS.download} Download</a>`;
                     
+                    // Slot 2 (Top-Right): Info
+                    let btnSlot2 = `<button class="btn btn-secondary" onclick="openDetailsModal('${t.id}')">${ICONS.info} Info</button>`;
+
+                    // Slot 3 (Bottom-Left): ČSFD / Database Link
+                    let btnSlot3 = '';
+                    if (t.content_type === 'book') {
+                        btnSlot3 = `<a href="https://www.databazeknih.cz/search?q=${encodeURIComponent(t.title)}" target="_blank" class="btn btn-book" title="Search on Databáze knih">${ICONS.book} Knihy</a>`;
+                    } else if (t.csfd_id) {
+                        btnSlot3 = `<a href="https://www.csfd.cz/film/${t.csfd_id}" target="_blank" class="btn btn-csfd" title="Open on ČSFD.cz">${ICONS.csfd} ${scoreVal || 'ČSFD'}</a>`;
+                    } else {
+                        btnSlot3 = `<button class="btn btn-secondary" disabled title="No rating link available">${ICONS.csfd} N/A</button>`;
+                    }
+
+                    // Slot 4 (Bottom-Right): NAS Push
+                    let btnSlot4 = data.can_use_nas 
+                        ? `<button data-id="${t.id}" data-filename="${encodedTitle}" onclick="sendToNas(this)" class="btn btn-secondary">${ICONS.nas} NAS</button>`
+                        : `<button class="btn btn-secondary" disabled title="NAS authorization required">${ICONS.nas} NAS</button>`;
+
                     let safeTitle = (t.title || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
                     article.innerHTML = `
@@ -565,6 +606,7 @@
                                 ${newBadge}
                                 <span class="badge">${t.category}</span>
                                 ${genreBadge}
+                                ${langBadges}
                                 <span class="badge">${t.size}</span>
                                 <span class="badge">${t.added_date}</span>
                             </div>
@@ -574,10 +616,10 @@
                             </div>
                             <div class="action-stack">
                                 <div class="action-grid">
-                                    <a href="${t.download_link}" class="btn">${ICONS.download} Download</a>
-                                    <button class="btn btn-secondary" onclick="openDetailsModal('${t.id}')">${ICONS.info} Info</button>
-                                    ${csfdActionBtn}
-                                    ${nasButton}
+                                    ${btnSlot1}
+                                    ${btnSlot2}
+                                    ${btnSlot3}
+                                    ${btnSlot4}
                                 </div>
                             </div>
                         </div>
@@ -619,24 +661,40 @@
 
                 modalTitle.innerText = data.title || "Torrent Details";
 
+                // Content Type Badge
+                let cTypeLabel = '🎬 Movie';
+                if (data.content_type === 'tv') cTypeLabel = `📺 Series ${data.season_episode ? '(' + data.season_episode + ')' : ''}`;
+                else if (data.content_type === 'book') cTypeLabel = '📚 Book / Audiobook';
+                else if (data.content_type === 'music') cTypeLabel = '🎵 Music';
+                else if (data.content_type === 'software') cTypeLabel = '💻 Software / Game';
+
+                let typeBadge = `<span class="badge" style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.4); font-weight: 600;">${cTypeLabel}</span>`;
+
                 let scoreBadge = '';
                 if (data.csfd_score) {
                     let scClass = getScoreClass(data.csfd_score);
                     scoreBadge = `<span class="badge csfd ${scClass}">${ICONS.star} Score: ${data.csfd_score}</span>`;
                 }
 
-                let csfdBtn = data.csfd_id ? `<a href="https://www.csfd.cz/film/${data.csfd_id}" target="_blank" class="badge csfd">${ICONS.csfd} Open on ČSFD.cz</a>` : '';
+                let sktBtn = data.sktorrent_url ? `<a href="${data.sktorrent_url}" target="_blank" class="badge skt">${ICONS.globe} Open on SkTorrent.eu</a>` : '';
+                let csfdBtn = data.csfd_url ? `<a href="${data.csfd_url}" target="_blank" class="badge csfd">${ICONS.csfd} Open on ČSFD.cz</a>` : '';
+                let bookBtn = data.databazeknih_url ? `<a href="${data.databazeknih_url}" target="_blank" class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); font-weight: 600;">${ICONS.book} Open on Databáze knih</a>` : '';
+                let imdbBtn = data.imdb_url ? `<a href="${data.imdb_url}" target="_blank" class="badge" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); font-weight: 600;">Open on IMDb</a>` : '';
+
+                let langPills = (data.languages && data.languages.length > 0) ? data.languages.map(l => `<span class="badge lang">Audio/Sub: ${l}</span>`).join('') : '';
+
                 let uploaderMeta = data.uploader ? `<span class="badge">Uploader: ${data.uploader}</span>` : '';
                 let sizeMeta = data.size ? `<span class="badge">Size: ${data.size}</span>` : '';
-                let hashMeta = data.infohash ? `<span class="badge">Hash: ${data.infohash}</span>` : '';
+                let hashMeta = data.infohash ? `<span class="badge" style="cursor: pointer;" onclick="copyInfohash('${data.infohash}')" title="Click to copy Infohash">Hash: ${data.infohash} ${ICONS.copy}</span>` : '';
 
                 let posterHtml = data.poster_url ? `<img class="detail-poster" src="${data.poster_url}" alt="Poster">` : '';
-                let synopsisHtml = data.synopsis ? `<div class="synopsis-box">${data.synopsis}</div>` : '';
+                let synopsisHtml = (data.synopsis && data.synopsis.trim().length > 0) ? `<div class="mediainfo-header">Synopsis / Obsah:</div><div class="synopsis-box">${data.synopsis}</div>` : '';
                 
                 let mediainfoHtml = '';
-                if (data.mediainfo_text) {
+                if (data.mediainfo_text && data.mediainfo_text.trim().length > 0) {
+                    let headerTitle = (data.content_type === 'music') ? 'Tracklist & Audio Specs:' : ((data.content_type === 'book') ? 'Book & File Details:' : 'MediaInfo & Codec Specs:');
                     mediainfoHtml = `
-                        <div class="mediainfo-header">MediaInfo & Codec Specs:</div>
+                        <div class="mediainfo-header">${headerTitle}</div>
                         <div class="mediainfo-box">
                             <pre>${data.mediainfo_text}</pre>
                         </div>
@@ -649,6 +707,24 @@
                         <div class="mediainfo-header">Trailer:</div>
                         <div class="trailer-container">
                             <iframe src="${data.trailer_url}" allowfullscreen></iframe>
+                        </div>
+                    `;
+                }
+
+                let relatedHtml = '';
+                if (data.related_torrents && data.related_torrents.length > 0) {
+                    relatedHtml = `
+                        <div class="mediainfo-header">Other Versions & Copies on SkTorrent (${data.related_torrents.length}):</div>
+                        <div class="related-box">
+                            ${data.related_torrents.map(r => `
+                                <div class="related-item">
+                                    <span class="related-item-title" title="${r.title.replace(/"/g, '&quot;')}">${r.title}</span>
+                                    <div class="related-actions">
+                                        <button class="btn btn-secondary" style="padding: 0.2rem 0.45rem; font-size: 0.75rem;" onclick="openDetailsModal('${r.id}')">${ICONS.info} Info</button>
+                                        <a href="${r.sktorrent_url}" target="_blank" class="btn btn-secondary" style="padding: 0.2rem 0.45rem; font-size: 0.75rem;">${ICONS.globe} SkT</a>
+                                    </div>
+                                </div>
+                            `).join('')}
                         </div>
                     `;
                 }
@@ -666,8 +742,13 @@
                 modalBody.innerHTML = `
                     ${posterHtml}
                     <div class="modal-meta">
+                        ${typeBadge}
                         ${scoreBadge}
+                        ${sktBtn}
                         ${csfdBtn}
+                        ${bookBtn}
+                        ${imdbBtn}
+                        ${langPills}
                         ${uploaderMeta}
                         ${sizeMeta}
                         ${hashMeta}
@@ -675,11 +756,18 @@
                     ${synopsisHtml}
                     ${mediainfoHtml}
                     ${trailerHtml}
+                    ${relatedHtml}
                     ${filesHtml}
                 `;
             } catch (err) {
                 modalBody.innerHTML = `<p style="color: var(--leech-color);">Network error: ${err.message}</p>`;
             }
+        }
+
+        function copyInfohash(hash) {
+            navigator.clipboard.writeText(hash).then(() => {
+                alert(`Copied Infohash to clipboard:\n${hash}`);
+            }).catch(() => {});
         }
 
         function closeDetailsModal(event) {
