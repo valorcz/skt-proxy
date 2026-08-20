@@ -12,8 +12,10 @@ import config
 import database
 from services.http_client import get_http_session, ensure_login
 from services.torrent_parser import parse_torrents
+from services.logger import setup_logger, log_siem_event
+from services.models import TorrentDTO
 
-logger = logging.getLogger(__name__)
+logger = setup_logger("skt-proxy.scraper")
 
 background_worker = ThreadPoolExecutor(max_workers=4)
 DB_WAS_EMPTY = database.is_db_empty()
@@ -49,7 +51,14 @@ def fetch_extras_task(torrent_id, image_url, needs_img, needs_csfd, db_path=None
                         f.write(resp.content)
                     local_img_path = f"/static/covers/{local_filename}"
             except Exception as e:
-                logger.error(f"Image fail {image_url}: {e}")
+                log_siem_event(
+                    logger,
+                    logging.WARNING,
+                    f"Image fetch failed for {torrent_id}: {e}",
+                    event="cover_fetch_failed",
+                    torrent_id=torrent_id,
+                    error=str(e),
+                )
         else:
             local_img_path = f"/static/covers/{local_filename}"
 
@@ -64,7 +73,14 @@ def fetch_extras_task(torrent_id, image_url, needs_img, needs_csfd, db_path=None
                 if match:
                     csfd_id = match.group(1)
         except Exception as e:
-            logger.error(f"CSFD fetch fail {torrent_id}: {e}")
+            log_siem_event(
+                logger,
+                logging.WARNING,
+                f"CSFD ID fetch failed for {torrent_id}: {e}",
+                event="csfd_fetch_failed",
+                torrent_id=torrent_id,
+                error=str(e),
+            )
 
     if local_img_path or csfd_id:
         with database.get_db_connection(db_path) as conn:
@@ -86,9 +102,18 @@ def fetch_extras_task(torrent_id, image_url, needs_img, needs_csfd, db_path=None
 
 def scrape_and_update(page, category, cache_key, db_path=None):
     global DB_WAS_EMPTY
+    start_time = time.time()
     session = get_http_session()
     try:
         if not ensure_login(session):
+            log_siem_event(
+                logger,
+                logging.ERROR,
+                "Scrape aborted due to authentication failure",
+                event="scrape_aborted_auth",
+                page=page,
+                category=category,
+            )
             return []
 
         url = f"https://sktorrent.eu/torrent/torrents_v2.php?active=0&page={page}"
@@ -166,10 +191,45 @@ def scrape_and_update(page, category, cache_key, db_path=None):
         if DB_WAS_EMPTY:
             DB_WAS_EMPTY = False
 
+        duration_ms = int((time.time() - start_time) * 1000)
+        log_siem_event(
+            logger,
+            logging.INFO,
+            f"Successfully scraped {len(torrents)} torrents for {cache_key}",
+            event="scrape_success",
+            page=page,
+            category=category,
+            count=len(torrents),
+            duration_ms=duration_ms,
+        )
         return torrents
     except Exception as e:
-        logger.error(f"Scrape failed for {cache_key}: {e}")
+        log_siem_event(
+            logger,
+            logging.ERROR,
+            f"Scrape failed for {cache_key}: {e}",
+            event="scrape_failed",
+            cache_key=cache_key,
+            error=str(e),
+            exc_info=True,
+        )
         return []
+
+
+def safe_background_scrape(page, category, cache_key, db_path=None):
+    """Supervised wrapper for background threads capturing uncaught exceptions."""
+    try:
+        scrape_and_update(page, category, cache_key, db_path)
+    except Exception as e:
+        log_siem_event(
+            logger,
+            logging.ERROR,
+            f"Background thread scrape crash for {cache_key}: {e}",
+            event="background_scrape_crash",
+            cache_key=cache_key,
+            error=str(e),
+            exc_info=True,
+        )
 
 
 def get_torrents(page=0, categories=None, genres=None, db_path=None):
@@ -194,7 +254,9 @@ def get_torrents(page=0, categories=None, genres=None, db_path=None):
     if needs_scrape:
         if row:
             threading.Thread(
-                target=scrape_and_update, args=(page, scrape_cat, cache_key, db_path)
+                target=safe_background_scrape,
+                args=(page, scrape_cat, cache_key, db_path),
+                daemon=True,
             ).start()
         else:
             scrape_and_update(page, scrape_cat, cache_key, db_path)

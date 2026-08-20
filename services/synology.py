@@ -3,8 +3,9 @@ import logging
 import requests
 import config
 from services.torrent_parser import torrent_bytes_to_magnet
+from services.logger import setup_logger, log_siem_event
 
-logger = logging.getLogger(__name__)
+logger = setup_logger("skt-proxy.synology")
 
 
 def get_synology_config():
@@ -26,10 +27,25 @@ def push_to_synology(file_bytes, filename):
     syn_url, syn_user, syn_pass, syn_dest, verify_ssl = get_synology_config()
 
     if not syn_url or not syn_user or not syn_pass:
+        log_siem_event(
+            logger,
+            logging.WARNING,
+            "Synology NAS configuration missing",
+            event="nas_push_failed",
+            reason="missing_config",
+        )
         return False, "Synology NAS configuration (SYNOLOGY_URL, SYNOLOGY_USER, or SYNOLOGY_PASSWORD) is missing."
 
     magnet_uri = torrent_bytes_to_magnet(file_bytes)
     if not magnet_uri:
+        log_siem_event(
+            logger,
+            logging.WARNING,
+            f"Magnet conversion failed for {filename}",
+            event="nas_push_failed",
+            filename=filename,
+            reason="bencode_error",
+        )
         return False, "Failed to parse magnet link from torrent file."
 
     base_url = syn_url
@@ -55,12 +71,25 @@ def push_to_synology(file_bytes, filename):
         login_data = login_resp.json()
         if not login_data.get("success"):
             error_code = login_data.get("error", {}).get("code", "Unknown")
+            log_siem_event(
+                logger,
+                logging.ERROR,
+                f"Synology DSM login failed with code {error_code}",
+                event="nas_login_failed",
+                error_code=error_code,
+            )
             return False, f"Synology DSM login failed (Code: {error_code})"
 
         sid = login_data.get("data", {}).get("sid", "")
         synotoken = login_data.get("data", {}).get("synotoken", "")
     except Exception as exc:
-        logger.error(f"Synology DSM login exception: {exc}")
+        log_siem_event(
+            logger,
+            logging.ERROR,
+            f"Synology DSM login exception: {exc}",
+            event="nas_login_error",
+            error=str(exc),
+        )
         return False, f"Synology login error: {exc}"
 
     # 2. Post Magnet URI to SYNO.DownloadStation.Task (V1 API)
@@ -83,18 +112,47 @@ def push_to_synology(file_bytes, filename):
         resp = session.post(task_url, data=task_data, headers=headers, timeout=15, verify=verify_ssl)
         result = resp.json()
         if result and result.get("success"):
-            logger.info("Successfully pushed magnet task to Synology DownloadStation via POST")
+            log_siem_event(
+                logger,
+                logging.INFO,
+                f"Pushed magnet task to Synology NAS: {filename}",
+                event="nas_push_success",
+                filename=filename,
+                method="POST",
+            )
             return True, "Task added successfully"
 
         # Fallback to GET request
         resp_get = session.get(task_url, params=task_data, headers=headers, timeout=15, verify=verify_ssl)
         result_get = resp_get.json()
         if result_get and result_get.get("success"):
-            logger.info("Successfully pushed magnet task to Synology DownloadStation via GET")
+            log_siem_event(
+                logger,
+                logging.INFO,
+                f"Pushed magnet task to Synology NAS via GET fallback: {filename}",
+                event="nas_push_success",
+                filename=filename,
+                method="GET",
+            )
             return True, "Task added successfully"
 
         code = result.get("error", {}).get("code", "Unknown")
+        log_siem_event(
+            logger,
+            logging.ERROR,
+            f"DownloadStation task creation rejected code {code}",
+            event="nas_push_rejected",
+            filename=filename,
+            code=code,
+        )
         return False, f"Failed to add task to DownloadStation (Code: {code})"
     except Exception as exc:
-        logger.error(f"Synology task creation exception: {exc}")
+        log_siem_event(
+            logger,
+            logging.ERROR,
+            f"Synology task creation exception: {exc}",
+            event="nas_push_error",
+            filename=filename,
+            error=str(exc),
+        )
         return False, f"Synology task creation error: {exc}"

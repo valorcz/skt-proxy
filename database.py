@@ -2,7 +2,11 @@ import sqlite3
 import time
 import json
 import sys
+import logging
 import config
+from services.logger import setup_logger, log_siem_event
+
+logger = setup_logger("skt-proxy.db")
 
 
 def get_db_path(db_path=None):
@@ -49,6 +53,17 @@ def init_db(db_path=None):
             )
         """
         )
+    optimize_db(db_path)
+
+
+def optimize_db(db_path=None):
+    """Executes passive WAL checkpointing and query optimizer stats compilation."""
+    try:
+        with get_db_connection(db_path) as conn:
+            conn.execute("PRAGMA wal_checkpoint(PASSIVE);")
+            conn.execute("PRAGMA optimize;")
+    except Exception as e:
+        logger.warning(f"WAL checkpoint optimize warning: {e}")
 
 
 def clear_expired_new_flags(db_path=None):
@@ -56,10 +71,18 @@ def clear_expired_new_flags(db_path=None):
     now = time.time()
     cutoff = now - 172800
     with get_db_connection(db_path) as conn:
-        conn.execute(
+        cursor = conn.execute(
             "UPDATE torrents SET is_new = 0 WHERE is_new = 1 AND created_at IS NOT NULL AND created_at < ?",
             (cutoff,),
         )
+        if cursor.rowcount > 0:
+            log_siem_event(
+                logger,
+                logging.INFO,
+                f"Cleared expired new flags on {cursor.rowcount} records",
+                event="clear_expired_new_flags",
+                count=cursor.rowcount,
+            )
 
 
 def is_db_empty(db_path=None):
@@ -74,6 +97,13 @@ def mark_read(tids, db_path=None):
         placeholders = ",".join("?" * len(tids))
         conn.execute(
             f"UPDATE torrents SET is_new = 0 WHERE id IN ({placeholders})", tids
+        )
+        log_siem_event(
+            logger,
+            logging.INFO,
+            f"Marked {len(tids)} torrents as read",
+            event="mark_read",
+            count=len(tids),
         )
 
 

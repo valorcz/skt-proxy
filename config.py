@@ -1,7 +1,26 @@
 import os
+import subprocess
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# --- BUILD VERSION RESOLUTION ---
+def get_app_version() -> str:
+    env_ver = os.environ.get("APP_VERSION", "").strip()
+    if env_ver:
+        return env_ver
+    try:
+        git_hash = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
+        ).decode("utf-8").strip()
+        if git_hash:
+            return f"v1.4.0-{git_hash}"
+    except Exception:
+        pass
+    return "v1.4.0"
+
+
+APP_VERSION = get_app_version()
 
 # --- TRACKER CONFIGURATION ---
 SKT_USERNAME = os.environ.get("SKT_USERNAME", "")
