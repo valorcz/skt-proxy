@@ -4,8 +4,8 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 
-import config
-from services.logger import setup_logger, log_siem_event
+import skt_proxy.config as config
+from skt_proxy.services.logger import setup_logger, log_siem_event
 
 logger = setup_logger("skt-proxy.http")
 

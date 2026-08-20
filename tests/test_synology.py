@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, patch
-import app
+from skt_proxy import app
 
 def test_push_to_synology_missing_config():
     with patch.object(app, "SYNOLOGY_URL", ""), patch.object(app, "SYNOLOGY_USER", ""), patch.object(app, "SYNOLOGY_PASSWORD", ""):

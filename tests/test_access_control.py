@@ -1,7 +1,6 @@
 import pytest
 from unittest.mock import patch
-import config
-import app
+from skt_proxy import config, app
 
 
 @pytest.fixture

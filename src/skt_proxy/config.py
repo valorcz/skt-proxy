@@ -42,10 +42,14 @@ NAS_ALLOWED_EMAILS = [
     if e.strip()
 ]
 
-# --- APP & DATABASE CONSTANTS ---
+# --- APP & RUNTIME DATA PATHS ---
+DATA_DIR = os.environ.get("DATA_DIR", "data")
 CACHE_EXPIRY = 300  # seconds (5 min)
-DB_PATH = "cache.db"
-COVERS_DIR = os.path.join("static", "covers")
 
+DB_PATH = os.path.join(DATA_DIR, "cache.db")
+COVERS_DIR = os.path.join(DATA_DIR, "covers")
+DOWNLOADS_DIR = os.path.join(DATA_DIR, "downloads")
+
+os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(COVERS_DIR, exist_ok=True)
-os.makedirs("downloads", exist_ok=True)
+os.makedirs(DOWNLOADS_DIR, exist_ok=True)

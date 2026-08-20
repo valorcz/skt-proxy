@@ -46,15 +46,19 @@ Access the interface at `http://localhost:5001`.
 ### Running Locally with `uv`
 
 ```bash
-OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES uv run gunicorn --workers=1 --threads=4 --bind=127.0.0.1:5000 app:app
+OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES uv run gunicorn --workers=1 --threads=4 --bind=127.0.0.1:5000 skt_proxy.app:app
 ```
 
 The `OBJC_DISABLE_INITIALIZE_FORK_SAFETY` variable is for `gunicorn` to run well on macOS.
 
-#### Alternative (Flask Development Server)
+#### Alternative (CLI & Flask Development Server)
 
 ```bash
-uv run flask --app app run --port 5001 --debug
+# Run via uv project CLI entrypoint
+uv run skt-proxy
+
+# Or run via module entrypoint
+uv run python -m skt_proxy
 ```
 
 ### Running Tests

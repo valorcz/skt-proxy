@@ -1,7 +1,11 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
-name = "skt_proxy"
-version = "0.9.0"
-description = "A simple SkTorrent proxy"
+name = "skt-proxy"
+version = "1.4.0"
+description = "A modern web interface and caching proxy for SkTorrent.eu"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -9,12 +13,18 @@ dependencies = [
     "flask>=3.1.3",
     "gunicorn>=25.1.0",
     "python-dotenv>=1.2.2",
-    "synology-api>=0.8.2",
+    "requests>=2.31.0",
+    "urllib3>=2.0.0",
 ]
 
-[tool.pytest.ini_options]
-pythonpath = "."
+[project.scripts]
+skt-proxy = "skt_proxy.app:main"
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/skt_proxy"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
 
 [dependency-groups]
 dev = [
