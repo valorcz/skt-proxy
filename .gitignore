@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+cache.db
+cache.db-wal
+cache.db-shm
+downloads/
+static/covers/
+.pytest_cache/
