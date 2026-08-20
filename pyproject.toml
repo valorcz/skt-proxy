@@ -1,6 +1,6 @@
 [project]
 name = "skt_proxy"
-version = "0.1.0"
+version = "0.4.0"
 description = "A simple SkTorrent proxy"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -10,4 +10,13 @@ dependencies = [
     "gunicorn>=25.1.0",
     "python-dotenv>=1.2.2",
     "synology-api>=0.8.2",
+]
+
+[tool.pytest.ini_options]
+pythonpath = "."
+
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
 ]

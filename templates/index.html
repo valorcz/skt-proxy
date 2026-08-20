@@ -5,48 +5,50 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SkT Proxy</title>
 
-<style>
+    <style>
         :root {
-            --bg-color: #050505;
-            --surface-rgb: 15, 15, 15;
-            --surface-hover: rgba(25, 25, 25, 0.8);
+            --bg-color: #08090a;
+            --surface-rgb: 18, 20, 24;
+            --surface-hover: rgba(28, 31, 38, 0.95);
             --primary-invert: #ffffff;
-            --text-main: #ededed;
-            --text-muted: #a1a1aa;
-            --border-color: rgba(255, 255, 255, 0.1);
-            --border-hover: rgba(255, 255, 255, 0.2);
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --border-hover: rgba(255, 255, 255, 0.18);
             --seed-color: #10b981;
-            --leech-color: #ef4444;
-            --new-bg: rgba(255, 255, 255, 0.1);
-            --new-text: #ffffff;
-            --radius: 12px;
-            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            --leech-color: #f43f5e;
             
-            /* Modern Accents */
-            --brand-gradient: linear-gradient(135deg, #3b82f6, #8b5cf6, #ec4899);
+            --csfd-red: #e11d48;
+            --csfd-blue: #3b82f6;
+            --csfd-gray: #64748b;
+            
+            --radius: 12px;
+            --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            
+            --brand-gradient: linear-gradient(135deg, #3b82f6, #6366f1, #ec4899);
             --mesh-bg: 
-                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
-                radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.15) 0px, transparent 50%),
-                radial-gradient(at 100% 100%, rgba(236, 72, 153, 0.15) 0px, transparent 50%);
+                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.12) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(236, 72, 153, 0.1) 0px, transparent 50%);
         }
 
         [data-theme="light"] {
-            --bg-color: #fafafa;
+            --bg-color: #f8fafc;
             --surface-rgb: 255, 255, 255;
-            --surface-hover: rgba(255, 255, 255, 0.9);
+            --surface-hover: rgba(255, 255, 255, 0.95);
             --primary-invert: #ffffff;
-            --text-main: #171717;
-            --text-muted: #71717a;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
             --border-color: rgba(0, 0, 0, 0.08);
             --border-hover: rgba(0, 0, 0, 0.15);
-            --new-bg: rgba(0, 0, 0, 0.05);
-            --new-text: #000000;
             
             --mesh-bg: 
-                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.1) 0px, transparent 50%),
-                radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.1) 0px, transparent 50%),
-                radial-gradient(at 100% 100%, rgba(236, 72, 153, 0.1) 0px, transparent 50%);
+                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.08) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(99, 102, 241, 0.08) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(236, 72, 153, 0.08) 0px, transparent 50%);
         }
+
+        * { box-sizing: border-box; }
 
         body {
             font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -55,111 +57,234 @@
             background-attachment: fixed;
             color: var(--text-main);
             margin: 0;
-            padding: 2rem;
+            padding: 1.5rem;
             line-height: 1.5;
             -webkit-font-smoothing: antialiased;
             transition: background-color var(--transition), color var(--transition);
         }
 
+        @media (max-width: 600px) {
+            body { padding: 0.75rem; }
+        }
+
         header {
             display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 2rem; padding-bottom: 1.5rem;
+            margin-bottom: 1.5rem; padding-bottom: 1rem;
             border-bottom: 1px solid var(--border-color); flex-wrap: wrap; gap: 1rem;
         }
 
-        h1 { margin: 0; font-weight: 700; font-size: 1.75rem; letter-spacing: -0.03em; background: var(--brand-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-
-        .controls { display: flex; gap: 0.75rem; align-items: center; }
-
-        input[type="text"], .theme-toggle {
-            padding: 0.5rem 0.75rem; font-size: 0.875rem; border-radius: 8px;
-            border: 1px solid var(--border-color); background: rgba(var(--surface-rgb), 0.5);
-            backdrop-filter: blur(8px); color: var(--text-main); outline: none; transition: var(--transition);
+        .brand-logo {
+            display: flex; align-items: center; gap: 0.6rem;
+            text-decoration: none; color: inherit;
         }
 
-        input[type="text"]:focus, .theme-toggle:hover { border-color: var(--border-hover); box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2); }
-        input[type="text"] { width: 220px; }
-        .theme-toggle { cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        h1 { margin: 0; font-weight: 800; font-size: 1.6rem; letter-spacing: -0.03em; background: var(--brand-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
 
-        .filters-container { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 2.5rem; }
-        .filter-row { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
-        .filter-label { font-size: 0.85rem; color: var(--text-muted); margin-right: 0.5rem; font-weight: 500; }
+        .controls { display: flex; gap: 0.6rem; align-items: center; width: 100%; max-width: 360px; }
+
+        .search-wrapper { position: relative; flex: 1; display: flex; align-items: center; }
+        
+        input[type="text"] {
+            width: 100%; padding: 0.5rem 2rem 0.5rem 0.85rem; font-size: 0.875rem; border-radius: 8px;
+            border: 1px solid var(--border-color); background: rgba(var(--surface-rgb), 0.6);
+            backdrop-filter: blur(12px); color: var(--text-main); outline: none; transition: var(--transition);
+        }
+
+        input[type="text"]:focus { border-color: rgba(99, 102, 241, 0.5); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15); }
+        
+        .search-clear {
+            position: absolute; right: 0.5rem; background: none; border: none;
+            color: var(--text-muted); cursor: pointer; padding: 0.2rem;
+            display: none; align-items: center; justify-content: center;
+        }
+        .search-clear.show { display: flex; }
+
+        .theme-toggle {
+            padding: 0.5rem 0.75rem; font-size: 0.875rem; border-radius: 8px;
+            border: 1px solid var(--border-color); background: rgba(var(--surface-rgb), 0.6);
+            backdrop-filter: blur(12px); color: var(--text-main); cursor: pointer; outline: none; transition: var(--transition);
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        .theme-toggle:hover { border-color: var(--border-hover); background: var(--surface-hover); }
+
+        .filters-container { display: flex; flex-direction: column; gap: 0.85rem; margin-bottom: 2rem; }
+        .filter-row { display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center; }
+        .filter-label { font-size: 0.825rem; color: var(--text-muted); margin-right: 0.4rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
 
         .pill {
-            background: rgba(var(--surface-rgb), 0.5); backdrop-filter: blur(8px);
+            background: rgba(var(--surface-rgb), 0.6); backdrop-filter: blur(8px);
             border: 1px solid var(--border-color); color: var(--text-main);
-            padding: 0.4rem 0.8rem; border-radius: 9999px; cursor: pointer;
-            font-size: 0.85rem; transition: var(--transition); user-select: none;
+            padding: 0.35rem 0.75rem; border-radius: 9999px; cursor: pointer;
+            font-size: 0.825rem; transition: var(--transition); user-select: none;
         }
 
         .pill:hover { border-color: var(--border-hover); transform: translateY(-1px); }
-        .pill.active { background: var(--brand-gradient); color: var(--primary-invert); border: none; font-weight: 500; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2); }
+        .pill.active { background: var(--brand-gradient); color: var(--primary-invert); border: none; font-weight: 600; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25); }
 
         .dropdown { position: relative; display: inline-block; }
         .dropdown-content {
-            display: none; position: absolute; background: rgba(var(--surface-rgb), 0.9);
-            backdrop-filter: blur(16px); min-width: 220px; max-height: 350px; overflow-y: auto;
+            display: none; position: absolute; background: rgba(var(--surface-rgb), 0.95);
+            backdrop-filter: blur(20px); min-width: 220px; max-height: 340px; overflow-y: auto;
             border: 1px solid var(--border-color); border-radius: var(--radius);
-            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); z-index: 10;
-            padding: 0.8rem; top: 110%; left: 0; flex-direction: column; gap: 0.5rem;
+            box-shadow: 0 12px 30px -5px rgba(0,0,0,0.4); z-index: 20;
+            padding: 0.75rem; top: 115%; left: 0; flex-direction: column; gap: 0.45rem;
         }
         .dropdown-content.show { display: flex; }
-        .dropdown-label { display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; cursor: pointer; color: var(--text-main); }
+        .dropdown-label { display: flex; align-items: center; gap: 0.6rem; font-size: 0.825rem; cursor: pointer; color: var(--text-main); }
 
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1.5rem; margin-bottom: 3rem; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1.25rem; margin-bottom: 3rem; }
 
+        /* --- CARD STYLES --- */
         .card {
-            background-color: rgba(var(--surface-rgb), 0.4); backdrop-filter: blur(12px);
+            background-color: rgba(var(--surface-rgb), 0.5); backdrop-filter: blur(12px);
             border-radius: var(--radius); border: 1px solid var(--border-color);
             overflow: hidden; display: flex; flex-direction: column; transition: var(--transition);
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
         }
-        .card:hover { border-color: rgba(139, 92, 246, 0.4); background-color: var(--surface-hover); transform: translateY(-4px); box-shadow: 0 12px 20px -5px rgba(0, 0, 0, 0.1); }
+        .card:hover { border-color: rgba(99, 102, 241, 0.4); background-color: var(--surface-hover); transform: translateY(-4px); box-shadow: 0 14px 28px -5px rgba(0, 0, 0, 0.25); }
         
-        .card-img { width: 100%; height: 340px; object-fit: cover; background: transparent; border-bottom: 1px solid var(--border-color); transition: opacity var(--transition); }
-        .card:hover .card-img { opacity: 0.9; }
+        .card-img-wrapper { position: relative; width: 100%; height: 320px; overflow: hidden; border-bottom: 1px solid var(--border-color); background: rgba(0, 0, 0, 0.2); }
+        .card-img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.4s ease, opacity 0.3s ease; }
+        .card:hover .card-img { transform: scale(1.05); opacity: 0.95; }
 
-        .card-content { padding: 1.25rem; display: flex; flex-direction: column; flex-grow: 1; }
-        .title { font-size: 1.05rem; font-weight: 600; margin: 0 0 0.75rem 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4; letter-spacing: -0.01em; }
+        /* CSFD Score Badge Overlay */
+        .csfd-overlay-badge {
+            position: absolute; top: 10px; right: 10px; z-index: 2;
+            padding: 0.25rem 0.55rem; border-radius: 6px; font-size: 0.775rem; font-weight: 700;
+            display: flex; align-items: center; gap: 0.3rem; backdrop-filter: blur(8px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3); text-decoration: none;
+        }
+        .csfd-overlay-badge.good { background: rgba(16, 185, 129, 0.9); color: #ffffff; }
+        .csfd-overlay-badge.avg { background: rgba(245, 158, 11, 0.9); color: #ffffff; }
+        .csfd-overlay-badge.bad { background: rgba(239, 68, 68, 0.9); color: #ffffff; }
+        .csfd-overlay-badge.neutral { background: rgba(100, 116, 139, 0.85); color: #ffffff; }
+        .csfd-overlay-badge:hover { transform: scale(1.05); }
 
-        .meta { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.4rem; }
-        .badge { background: rgba(var(--surface-rgb), 0.5); border: 1px solid var(--border-color); padding: 0.1rem 0.5rem; border-radius: 6px; backdrop-filter: blur(4px); }
+        .card-content { padding: 1rem; display: flex; flex-direction: column; flex-grow: 1; }
+        .title { font-size: 0.975rem; font-weight: 600; margin: 0 0 0.5rem 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4; letter-spacing: -0.01em; word-break: break-word; }
+
+        .meta { font-size: 0.725rem; color: var(--text-muted); margin-bottom: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
+        .badge { background: rgba(var(--surface-rgb), 0.6); border: 1px solid var(--border-color); padding: 0.15rem 0.5rem; border-radius: 6px; backdrop-filter: blur(4px); text-decoration: none; color: inherit; }
         .badge.new { background: var(--brand-gradient); color: var(--primary-invert); border: none; font-weight: 600; }
+        .badge.lang { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); font-weight: 600; }
+        .badge.skt { background: rgba(139, 92, 246, 0.15); color: #c084fc; border: 1px solid rgba(139, 92, 246, 0.35); font-weight: 600; }
 
-        .stats { display: flex; gap: 1rem; font-size: 0.8rem; margin-bottom: 1rem; margin-top: auto; padding-top: 1rem; font-weight: 500;}
-        .seed { color: var(--seed-color); }
-        .leech { color: var(--leech-color); }
+        .stats { display: flex; gap: 0.85rem; font-size: 0.775rem; margin-bottom: 0.75rem; margin-top: auto; padding-top: 0.65rem; font-weight: 600; border-top: 1px dashed var(--border-color); }
+        .seed { color: var(--seed-color); display: inline-flex; align-items: center; gap: 0.2rem; }
+        .leech { color: var(--leech-color); display: inline-flex; align-items: center; gap: 0.2rem; }
+
+        /* Icon Utility */
+        .btn-icon { display: inline-block; vertical-align: middle; flex-shrink: 0; fill: currentColor; }
+        .stroke-icon { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
         .btn {
-            display: flex; align-items: center; justify-content: center; text-align: center;
+            display: inline-flex; align-items: center; justify-content: center; text-align: center;
             background: var(--brand-gradient); color: var(--primary-invert);
-            text-decoration: none; padding: 0.6rem 0.75rem; border-radius: 8px;
-            font-size: 0.875rem; font-weight: 600; cursor: pointer; border: none;
+            text-decoration: none; padding: 0.48rem 0.6rem; border-radius: 8px;
+            font-size: 0.8rem; font-weight: 600; cursor: pointer; border: none;
             width: 100%; transition: var(--transition); box-sizing: border-box;
-            background-size: 150% auto;
+            background-size: 150% auto; gap: 0.35rem;
         }
-        .btn:hover { background-position: right center; transform: scale(1.02); box-shadow: 0 4px 12px rgba(139, 92, 246, 0.25); }
+        .btn:hover { background-position: right center; transform: scale(1.02); box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25); }
         
-        .btn-secondary { background: rgba(var(--surface-rgb), 0.5); color: var(--text-main); border: 1px solid var(--border-color); font-weight: 500; backdrop-filter: blur(4px); }
-        .btn-secondary:hover { background: var(--surface-hover); border-color: rgba(139, 92, 246, 0.4); transform: scale(1.02); }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+        .btn-secondary { background: rgba(var(--surface-rgb), 0.6); color: var(--text-main); border: 1px solid var(--border-color); font-weight: 500; backdrop-filter: blur(4px); }
+        .btn-secondary:hover:not(:disabled) { background: var(--surface-hover); border-color: rgba(99, 102, 241, 0.4); transform: scale(1.02); }
+        .btn-csfd { background: rgba(225, 29, 72, 0.15); color: #f43f5e; border: 1px solid rgba(225, 29, 72, 0.35); font-weight: 600; }
+        .btn-csfd:hover { background: rgba(225, 29, 72, 0.3); border-color: #f43f5e; }
+        .btn-book { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); font-weight: 600; }
+        .btn-book:hover { background: rgba(16, 185, 129, 0.3); border-color: #34d399; }
+        .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; box-shadow: none; filter: grayscale(80%); }
         
-        .action-stack { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
-        .action-row { display: flex; gap: 0.5rem; }
+        .action-stack { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.35rem; }
+        .action-grid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 0.35rem; }
 
         #loadMoreContainer { text-align: center; max-width: 200px; margin: 0 auto; }
         
-        .skeleton { background: var(--border-color); height: 340px; width: 100%; animation: pulse 1.5s infinite ease-in-out; }
+        .skeleton { background: var(--border-color); height: 320px; width: 100%; animation: pulse 1.5s infinite ease-in-out; }
         @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+
+        /* --- MODAL READER STYLES --- */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(10px);
+            z-index: 100; justify-content: center; align-items: center; padding: 1rem;
+        }
+        .modal-overlay.active { display: flex; }
+
+        .modal-content {
+            background: rgba(var(--surface-rgb), 0.95); border: 1px solid var(--border-color);
+            border-radius: var(--radius); width: 100%; max-width: 680px; max-height: 88vh;
+            display: flex; flex-direction: column; overflow: hidden;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); animation: modalIn 0.25s ease-out;
+        }
+        @keyframes modalIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+
+        .modal-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.9rem 1.25rem; border-bottom: 1px solid var(--border-color);
+            background: rgba(var(--surface-rgb), 0.8);
+        }
+        .modal-header h2 { margin: 0; font-size: 1.05rem; font-weight: 700; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 85%; }
+        .modal-close { background: none; border: none; font-size: 1.2rem; color: var(--text-muted); cursor: pointer; padding: 0.2rem; display: flex; align-items: center; justify-content: center; }
+        .modal-close:hover { color: var(--text-main); }
+
+        .modal-body { padding: 1.25rem; overflow-y: auto; font-size: 0.9rem; line-height: 1.6; }
+        .modal-meta { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 1.15rem; }
+        
+        .detail-poster { width: 100%; max-height: 350px; object-fit: contain; border-radius: 8px; margin-bottom: 1.15rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); }
+        
+        .synopsis-box {
+            background: rgba(var(--surface-rgb), 0.5); border: 1px solid var(--border-color);
+            border-radius: 8px; padding: 0.9rem 1rem; margin-bottom: 1.15rem;
+            white-space: pre-wrap; font-size: 0.925rem; color: var(--text-main); line-height: 1.6;
+        }
+
+        .mediainfo-header { font-weight: 600; font-size: 0.9rem; margin-bottom: 0.45rem; color: var(--text-main); }
+        .mediainfo-box {
+            background: rgba(0, 0, 0, 0.45); border: 1px solid var(--border-color);
+            border-radius: 8px; padding: 0.85rem; margin-bottom: 1.15rem;
+            overflow-x: auto; max-height: 250px; overflow-y: auto;
+        }
+        .mediainfo-box pre { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.8rem; color: #38bdf8; line-height: 1.45; }
+
+        .trailer-container { margin-bottom: 1.15rem; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 8px; border: 1px solid var(--border-color); }
+        .trailer-container iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
+
+        .related-box {
+            background: rgba(var(--surface-rgb), 0.4); border: 1px solid var(--border-color);
+            border-radius: 8px; padding: 0.75rem 0.85rem; margin-bottom: 1.15rem;
+            display: flex; flex-direction: column; gap: 0.5rem;
+        }
+        .related-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.4rem 0.6rem; border-radius: 6px; background: rgba(0,0,0,0.2);
+            border: 1px solid var(--border-color); gap: 0.5rem; font-size: 0.825rem;
+        }
+        .related-item-title { flex: 1; word-break: break-word; font-weight: 500; }
+        .related-actions { display: flex; gap: 0.3rem; flex-shrink: 0; }
+
+        .files-header { font-weight: 600; font-size: 0.9rem; margin-bottom: 0.45rem; color: var(--text-main); }
+        .files-list { list-style: none; padding: 0; margin: 0; font-family: monospace; font-size: 0.8rem; background: rgba(var(--surface-rgb), 0.3); border: 1px solid var(--border-color); border-radius: 8px; max-height: 180px; overflow-y: auto; }
+        .files-list li { padding: 0.35rem 0.75rem; border-bottom: 1px solid var(--border-color); word-break: break-all; }
+        .files-list li:last-child { border-bottom: none; }
     </style>
 </head>
 <body>
 
     <header>
-        <h1>SkT Proxy</h1>
+        <a href="/" class="brand-logo">
+            <h1>SkT Proxy</h1>
+        </a>
         <div class="controls">
-            <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle Theme">🌓</button>
-            <input type="text" id="searchInput" placeholder="Search loaded..." onkeyup="filterLocalTorrents()">
+            <div class="search-wrapper">
+                <input type="text" id="searchInput" placeholder="Search title..." onkeyup="handleSearchInput()">
+                <button class="search-clear" id="searchClear" onclick="clearSearch()" title="Clear Search">
+                    <svg class="stroke-icon" width="14" height="14" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle Theme">
+                <svg class="stroke-icon" width="15" height="15" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+            </button>
         </div>
     </header>
 
@@ -173,20 +298,50 @@
             <div class="dropdown">
                 <button class="pill" id="genreDropdownBtn" onclick="toggleGenreDropdown()">Select Genres ▾</button>
                 <div class="dropdown-content" id="genreDropdownContent">
-                    </div>
+                </div>
             </div>
-            <div id="activeGenresContainer" style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-left: 0.5rem;"></div>
+            <div id="activeGenresContainer" style="display: flex; gap: 0.4rem; flex-wrap: wrap; margin-left: 0.4rem;"></div>
         </div>
     </div>
 
     <main class="grid" id="torrentGrid">
-        </main>
+    </main>
 
     <div id="loadMoreContainer">
         <button id="loadMoreBtn" class="btn btn-secondary" onclick="loadMore()">Load More</button>
     </div>
 
+    <!-- Details Reader Modal -->
+    <div id="detailsModal" class="modal-overlay" onclick="closeDetailsModal(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2 id="modalTitle">Torrent Details</h2>
+                <button class="modal-close" onclick="closeDetailsModal()" title="Close">
+                    <svg class="stroke-icon" width="16" height="16" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <p style="color: var(--text-muted); text-align: center; padding: 2rem 0;">Fetching description and MediaInfo...</p>
+            </div>
+        </div>
+    </div>
+
     <script>
+        // --- Monocolored Vector Icons ---
+        const ICONS = {
+            download: `<svg class="stroke-icon" width="14" height="14" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+            info: `<svg class="stroke-icon" width="14" height="14" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`,
+            csfd: `<svg class="stroke-icon" width="14" height="14" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+            book: `<svg class="stroke-icon" width="14" height="14" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`,
+            music: `<svg class="stroke-icon" width="14" height="14" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`,
+            star: `<svg class="btn-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+            nas: `<svg class="stroke-icon" width="14" height="14" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>`,
+            globe: `<svg class="stroke-icon" width="14" height="14" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10z"/></svg>`,
+            copy: `<svg class="stroke-icon" width="14" height="14" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
+            seed: `<svg class="stroke-icon" width="12" height="12" viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg>`,
+            leech: `<svg class="stroke-icon" width="12" height="12" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>`
+        };
+
         // --- Theme Management ---
         const htmlEl = document.documentElement;
         const savedTheme = localStorage.getItem('skt_theme');
@@ -213,7 +368,6 @@
             fetchGenres();
             fetchTorrents(true);
             
-            // Close dropdown if clicked outside
             window.onclick = function(event) {
                 if (!event.target.matches('#genreDropdownBtn') && !event.target.closest('#genreDropdownContent')) {
                     document.getElementById("genreDropdownContent").classList.remove('show');
@@ -221,7 +375,30 @@
             }
         });
 
-// --- Categories ---
+        // --- Search ---
+        function handleSearchInput() {
+            const val = document.getElementById('searchInput').value;
+            const clearBtn = document.getElementById('searchClear');
+            clearBtn.classList.toggle('show', val.length > 0);
+            filterLocalTorrents();
+        }
+
+        function clearSearch() {
+            const input = document.getElementById('searchInput');
+            input.value = '';
+            handleSearchInput();
+        }
+
+        function filterLocalTorrents() {
+            const input = document.getElementById('searchInput').value.toLowerCase();
+            const cards = document.getElementsByClassName('card');
+            for (let i = 0; i < cards.length; i++) {
+                const title = cards[i].querySelector('.title').innerText.toLowerCase();
+                cards[i].style.display = title.includes(input) ? "" : "none";
+            }
+        }
+
+        // --- Categories ---
         async function fetchCategories() {
             try {
                 const res = await fetch('/api/categories');
@@ -303,14 +480,42 @@
         }
 
         // --- Data Fetching ---
-        function filterLocalTorrents() {
-            const input = document.getElementById('searchInput').value.toLowerCase();
-            const cards = document.getElementsByClassName('card');
-            for (let i = 0; i < cards.length; i++) {
-                const title = cards[i].querySelector('.title').innerText.toLowerCase();
-                cards[i].style.display = title.includes(input) ? "" : "none";
-            }
+        function getScoreClass(scoreStr) {
+            if (!scoreStr) return 'neutral';
+            const num = parseInt(scoreStr.replace('%', ''));
+            if (isNaN(num)) return 'neutral';
+            if (num >= 70) return 'good';
+            if (num >= 50) return 'avg';
+            return 'bad';
         }
+
+        // --- Viewport Observer for "New" Badge Removal ---
+        const newBadgeObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const card = entry.target;
+                    const id = card.getAttribute('data-id');
+                    if (id && card.getAttribute('data-new') === 'true') {
+                        card.setAttribute('data-new', 'false');
+                        newBadgeObserver.unobserve(card);
+
+                        const badge = card.querySelector('.badge.new');
+                        if (badge) {
+                            badge.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+                            badge.style.opacity = '0';
+                            badge.style.transform = 'scale(0.7)';
+                            setTimeout(() => badge.remove(), 400);
+                        }
+
+                        fetch('/api/mark_read', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: id })
+                        }).catch(err => console.error('Failed to mark read:', err));
+                    }
+                }
+            });
+        }, { threshold: 0.5 });
 
         async function fetchTorrents(reset = false) {
             const grid = document.getElementById('torrentGrid');
@@ -346,33 +551,76 @@
                     const article = document.createElement('article');
                     article.className = 'card';
                     
+                    if (t.is_new) {
+                        article.setAttribute('data-id', t.id);
+                        article.setAttribute('data-new', 'true');
+                        newBadgeObserver.observe(article);
+                    }
+                    
                     let newBadge = t.is_new ? '<span class="badge new">New</span>' : '';
                     let genreBadge = t.genres ? t.genres.map(g => `<span class="badge">${g}</span>`).join('') : '';
-                    let encodedTitle = t.download_link.split('&f=')[1];
-                    let csfdBtn = t.csfd_id ? `<a href="https://www.csfd.cz/film/${t.csfd_id}" target="_blank" class="btn btn-secondary" style="flex: 0 0 auto; width: auto;" title="ČSFD">ČSFD</a>` : '';
-                    let nasButton = data.can_use_nas ? `<button onclick="sendToNas('${t.id}', '${encodedTitle}', this)" class="btn btn-secondary">Send to NAS</button>` : '';
+                    let langBadges = t.languages ? t.languages.map(l => `<span class="badge lang">${l}</span>`).join('') : '';
+                    let encodedTitle = t.download_link.includes('&f=') ? t.download_link.split('&f=')[1] : '';
                     
+                    let scoreVal = t.csfd_score || '';
+                    let csfdOverlayBadge = '';
+                    if (scoreVal) {
+                        let scoreClass = getScoreClass(scoreVal);
+                        let csfdHref = t.csfd_id ? `https://www.csfd.cz/film/${t.csfd_id}` : '#';
+                        let csfdTarget = t.csfd_id ? 'target="_blank"' : '';
+                        csfdOverlayBadge = `<a href="${csfdHref}" ${csfdTarget} class="csfd-overlay-badge ${scoreClass}" title="ČSFD Score: ${scoreVal}">${ICONS.star} ${scoreVal}</a>`;
+                    }
+
+                    // --- STABLE BUTTON SLOTS (2x2 Grid) ---
+                    // Slot 1 (Top-Left): Download
+                    let btnSlot1 = `<a href="${t.download_link}" class="btn">${ICONS.download} Download</a>`;
+                    
+                    // Slot 2 (Top-Right): Info
+                    let btnSlot2 = `<button class="btn btn-secondary" onclick="openDetailsModal('${t.id}')">${ICONS.info} Info</button>`;
+
+                    // Slot 3 (Bottom-Left): ČSFD / Database Link
+                    let btnSlot3 = '';
+                    if (t.content_type === 'book') {
+                        btnSlot3 = `<a href="https://www.databazeknih.cz/search?q=${encodeURIComponent(t.title)}" target="_blank" class="btn btn-book" title="Search on Databáze knih">${ICONS.book} Knihy</a>`;
+                    } else if (t.csfd_id) {
+                        btnSlot3 = `<a href="https://www.csfd.cz/film/${t.csfd_id}" target="_blank" class="btn btn-csfd" title="Open on ČSFD.cz">${ICONS.csfd} ${scoreVal || 'ČSFD'}</a>`;
+                    } else {
+                        btnSlot3 = `<button class="btn btn-secondary" disabled title="No rating link available">${ICONS.csfd} N/A</button>`;
+                    }
+
+                    // Slot 4 (Bottom-Right): NAS Push
+                    let btnSlot4 = data.can_use_nas 
+                        ? `<button data-id="${t.id}" data-filename="${encodedTitle}" onclick="sendToNas(this)" class="btn btn-secondary">${ICONS.nas} NAS</button>`
+                        : `<button class="btn btn-secondary" disabled title="NAS authorization required">${ICONS.nas} NAS</button>`;
+
+                    let safeTitle = (t.title || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
                     article.innerHTML = `
-                        <img class="card-img" src="${t.display_image}" loading="lazy" onerror="this.style.display='none'">
+                        <div class="card-img-wrapper">
+                            ${csfdOverlayBadge}
+                            <img class="card-img" src="${t.display_image}" loading="lazy" onerror="this.style.display='none'">
+                        </div>
                         <div class="card-content">
-                            <h2 class="title" title="${t.title}">${t.title}</h2>
+                            <h2 class="title" title="${safeTitle}">${safeTitle}</h2>
                             <div class="meta">
                                 ${newBadge}
                                 <span class="badge">${t.category}</span>
                                 ${genreBadge}
+                                ${langBadges}
                                 <span class="badge">${t.size}</span>
                                 <span class="badge">${t.added_date}</span>
                             </div>
                             <div class="stats">
-                                <span class="seed">▲ ${t.seeders}</span>
-                                <span class="leech">▼ ${t.leechers}</span>
+                                <span class="seed">${ICONS.seed} ${t.seeders}</span>
+                                <span class="leech">${ICONS.leech} ${t.leechers}</span>
                             </div>
                             <div class="action-stack">
-                                <div class="action-row">
-                                    <a href="${t.download_link}" class="btn" style="flex: 1;">Download</a>
-                                    ${csfdBtn}
+                                <div class="action-grid">
+                                    ${btnSlot1}
+                                    ${btnSlot2}
+                                    ${btnSlot3}
+                                    ${btnSlot4}
                                 </div>
-                                ${nasButton}
                             </div>
                         </div>
                     `;
@@ -392,7 +640,151 @@
 
         function loadMore() { fetchTorrents(false); }
 
-        async function sendToNas(id, f, btnElement) {
+        // --- Details Reader Modal ---
+        async function openDetailsModal(id) {
+            const modal = document.getElementById('detailsModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalBody = document.getElementById('modalBody');
+
+            modalTitle.innerText = "Loading Torrent Details...";
+            modalBody.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 2rem 0;">Fetching description and MediaInfo...</p>';
+            modal.classList.add('active');
+
+            try {
+                const res = await fetch(`/api/torrent_details?id=${id}`);
+                const data = await res.json();
+
+                if (!res.ok || data.error) {
+                    modalBody.innerHTML = `<p style="color: var(--leech-color);">Error loading details: ${data.error || 'Unknown error'}</p>`;
+                    return;
+                }
+
+                modalTitle.innerText = data.title || "Torrent Details";
+
+                // Content Type Badge
+                let cTypeLabel = '🎬 Movie';
+                if (data.content_type === 'tv') cTypeLabel = `📺 Series ${data.season_episode ? '(' + data.season_episode + ')' : ''}`;
+                else if (data.content_type === 'book') cTypeLabel = '📚 Book / Audiobook';
+                else if (data.content_type === 'music') cTypeLabel = '🎵 Music';
+                else if (data.content_type === 'software') cTypeLabel = '💻 Software / Game';
+
+                let typeBadge = `<span class="badge" style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.4); font-weight: 600;">${cTypeLabel}</span>`;
+
+                let scoreBadge = '';
+                if (data.csfd_score) {
+                    let scClass = getScoreClass(data.csfd_score);
+                    scoreBadge = `<span class="badge csfd ${scClass}">${ICONS.star} Score: ${data.csfd_score}</span>`;
+                }
+
+                let sktBtn = data.sktorrent_url ? `<a href="${data.sktorrent_url}" target="_blank" class="badge skt">${ICONS.globe} Open on SkTorrent.eu</a>` : '';
+                let csfdBtn = data.csfd_url ? `<a href="${data.csfd_url}" target="_blank" class="badge csfd">${ICONS.csfd} Open on ČSFD.cz</a>` : '';
+                let bookBtn = data.databazeknih_url ? `<a href="${data.databazeknih_url}" target="_blank" class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); font-weight: 600;">${ICONS.book} Open on Databáze knih</a>` : '';
+                let imdbBtn = data.imdb_url ? `<a href="${data.imdb_url}" target="_blank" class="badge" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); font-weight: 600;">Open on IMDb</a>` : '';
+
+                let langPills = (data.languages && data.languages.length > 0) ? data.languages.map(l => `<span class="badge lang">Audio/Sub: ${l}</span>`).join('') : '';
+
+                let uploaderMeta = data.uploader ? `<span class="badge">Uploader: ${data.uploader}</span>` : '';
+                let sizeMeta = data.size ? `<span class="badge">Size: ${data.size}</span>` : '';
+                let hashMeta = data.infohash ? `<span class="badge" style="cursor: pointer;" onclick="copyInfohash('${data.infohash}')" title="Click to copy Infohash">Hash: ${data.infohash} ${ICONS.copy}</span>` : '';
+
+                let posterHtml = data.poster_url ? `<img class="detail-poster" src="${data.poster_url}" alt="Poster">` : '';
+                let synopsisHtml = (data.synopsis && data.synopsis.trim().length > 0) ? `<div class="mediainfo-header">Synopsis / Obsah:</div><div class="synopsis-box">${data.synopsis}</div>` : '';
+                
+                let mediainfoHtml = '';
+                if (data.mediainfo_text && data.mediainfo_text.trim().length > 0) {
+                    let headerTitle = (data.content_type === 'music') ? 'Tracklist & Audio Specs:' : ((data.content_type === 'book') ? 'Book & File Details:' : 'MediaInfo & Codec Specs:');
+                    mediainfoHtml = `
+                        <div class="mediainfo-header">${headerTitle}</div>
+                        <div class="mediainfo-box">
+                            <pre>${data.mediainfo_text}</pre>
+                        </div>
+                    `;
+                }
+
+                let trailerHtml = '';
+                if (data.trailer_url) {
+                    trailerHtml = `
+                        <div class="mediainfo-header">Trailer:</div>
+                        <div class="trailer-container">
+                            <iframe src="${data.trailer_url}" allowfullscreen></iframe>
+                        </div>
+                    `;
+                }
+
+                let relatedHtml = '';
+                if (data.related_torrents && data.related_torrents.length > 0) {
+                    relatedHtml = `
+                        <div class="mediainfo-header">Other Versions & Copies on SkTorrent (${data.related_torrents.length}):</div>
+                        <div class="related-box">
+                            ${data.related_torrents.map(r => `
+                                <div class="related-item">
+                                    <span class="related-item-title" title="${r.title.replace(/"/g, '&quot;')}">${r.title}</span>
+                                    <div class="related-actions">
+                                        <button class="btn btn-secondary" style="padding: 0.2rem 0.45rem; font-size: 0.75rem;" onclick="openDetailsModal('${r.id}')">${ICONS.info} Info</button>
+                                        <a href="${r.sktorrent_url}" target="_blank" class="btn btn-secondary" style="padding: 0.2rem 0.45rem; font-size: 0.75rem;">${ICONS.globe} SkT</a>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                }
+
+                let filesHtml = '';
+                if (data.files && data.files.length > 0) {
+                    filesHtml = `
+                        <div class="files-header">Files in Torrent (${data.files.length}):</div>
+                        <ul class="files-list">
+                            ${data.files.map(f => `<li>${f}</li>`).join('')}
+                        </ul>
+                    `;
+                }
+
+                modalBody.innerHTML = `
+                    ${posterHtml}
+                    <div class="modal-meta">
+                        ${typeBadge}
+                        ${scoreBadge}
+                        ${sktBtn}
+                        ${csfdBtn}
+                        ${bookBtn}
+                        ${imdbBtn}
+                        ${langPills}
+                        ${uploaderMeta}
+                        ${sizeMeta}
+                        ${hashMeta}
+                    </div>
+                    ${synopsisHtml}
+                    ${mediainfoHtml}
+                    ${trailerHtml}
+                    ${relatedHtml}
+                    ${filesHtml}
+                `;
+            } catch (err) {
+                modalBody.innerHTML = `<p style="color: var(--leech-color);">Network error: ${err.message}</p>`;
+            }
+        }
+
+        function copyInfohash(hash) {
+            navigator.clipboard.writeText(hash).then(() => {
+                alert(`Copied Infohash to clipboard:\n${hash}`);
+            }).catch(() => {});
+        }
+
+        function closeDetailsModal(event) {
+            if (event && event.target && !event.target.classList.contains('modal-overlay') && !event.target.classList.contains('modal-close')) {
+                return;
+            }
+            document.getElementById('detailsModal').classList.remove('active');
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeDetailsModal();
+        });
+
+        // --- NAS Upload Handler ---
+        async function sendToNas(btnElement) {
+            const id = btnElement.getAttribute('data-id');
+            const f = btnElement.getAttribute('data-filename');
             const originalText = btnElement.innerText;
             btnElement.innerText = "Sending...";
             btnElement.disabled = true;
@@ -403,28 +795,34 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id: id, f: f })
                 });
-                const result = await response.json();
 
-                if (result.success) {
+                let result;
+                const contentType = response.headers.get("content-type") || "";
+                if (contentType.includes("application/json")) {
+                    result = await response.json();
+                } else {
+                    const text = await response.text();
+                    throw new Error(`Server returned HTML response (${response.status}): ${text.slice(0, 120)}...`);
+                }
+
+                if (response.ok && result.success) {
                     btnElement.innerText = "Sent";
                     btnElement.style.borderColor = "var(--seed-color)";
                     btnElement.style.color = "var(--seed-color)";
                 } else {
-                    alert("Failed: " + result.error);
+                    alert("Failed: " + (result.error || result.message || `HTTP ${response.status}`));
                     btnElement.innerText = "Error";
                 }
             } catch (error) {
-                alert("Network error: " + error);
+                alert(error.message || ("Network error: " + error));
                 btnElement.innerText = originalText;
             }
             
             setTimeout(() => {
-                if(btnElement.innerText === "Sent") {
-                    btnElement.innerText = originalText;
-                    btnElement.style.borderColor = "";
-                    btnElement.style.color = "";
-                    btnElement.disabled = false;
-                }
+                btnElement.innerText = originalText;
+                btnElement.style.borderColor = "";
+                btnElement.style.color = "";
+                btnElement.disabled = false;
             }, 3000);
         }
     </script>
