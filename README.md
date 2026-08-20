@@ -46,10 +46,14 @@ Access the interface at `http://localhost:5001`.
 ### Running Locally with `uv`
 
 ```bash
-# Install dependencies & run Gunicorn server
-uv run gunicorn --workers=1 --threads=4 --bind=127.0.0.1:5000 app:app
+OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES uv run gunicorn --workers=1 --threads=4 --bind=127.0.0.1:5000 app:app
+```
 
-# Or run Flask development server
+The `OBJC_DISABLE_INITIALIZE_FORK_SAFETY` variable is for `gunicorn` to run well on macOS.
+
+#### Alternative (Flask Development Server)
+
+```bash
 uv run flask --app app run --port 5001 --debug
 ```
 

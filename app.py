@@ -2,7 +2,7 @@ import os
 import io
 import urllib.parse
 import logging
-from flask import Flask, render_template, request, send_file, jsonify
+from flask import Flask, render_template, request, send_file, send_from_directory, jsonify
 from werkzeug.exceptions import HTTPException
 
 import config
@@ -16,14 +16,9 @@ from services.torrent_parser import (
 )
 from services import synology
 from services import scraper
+from services.logger import setup_logger, log_siem_event
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-logger = logging.getLogger(__name__)
-logging.getLogger("urllib3").setLevel(logging.WARNING)
+logger = setup_logger("skt-proxy.app")
 
 if "gunicorn" in os.environ.get("SERVER_SOFTWARE", "") or __name__ != "__main__":
     gunicorn_logger = logging.getLogger("gunicorn.error")
@@ -96,7 +91,15 @@ def handle_global_exception(e):
             return jsonify({"error": e.description}), e.code
         return e
 
-    logger.error(f"Unhandled exception on {request.path}: {e}", exc_info=True)
+    log_siem_event(
+        logger,
+        logging.ERROR,
+        f"Unhandled exception on {request.path}: {e}",
+        event="http_unhandled_exception",
+        path=request.path,
+        error=str(e),
+        exc_info=True,
+    )
     if request.path.startswith("/api/"):
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
     return "Internal server error", 500
@@ -108,11 +111,30 @@ def favicon():
     return "", 204
 
 
+@app.route("/static/covers/<path:filename>")
+def serve_cover(filename):
+    """Serve cached cover images with 7-day immutable Cache-Control headers."""
+    response = send_from_directory(config.COVERS_DIR, filename)
+    response.headers["Cache-Control"] = "public, max-age=604800, immutable"
+    return response
+
+
 @app.route("/")
 def index():
     if not ensure_login(skt_session):
-        return "Proxy unable to authenticate with SkTorrent.", 502
-    return render_template("index.html", can_use_nas=can_use_nas())
+        log_siem_event(
+            logger,
+            logging.ERROR,
+            "Proxy failed to authenticate with SkTorrent on index request",
+            event="index_auth_failed",
+        )
+    return render_template(
+        "index.html",
+        can_use_nas=can_use_nas(),
+        app_version=config.APP_VERSION,
+        current_user=get_current_user_email(),
+        skt_username=config.SKT_USERNAME,
+    )
 
 
 @app.route("/api/genres")
@@ -154,12 +176,27 @@ def api_torrent_details():
         url = f"https://sktorrent.eu/torrent/details.php?id={tid}"
         resp = skt_session.get(url, timeout=12)
         if resp.status_code != 200:
+            log_siem_event(
+                logger,
+                logging.WARNING,
+                f"Failed to fetch details for tid={tid} status={resp.status_code}",
+                event="details_fetch_status_error",
+                tid=tid,
+                status_code=resp.status_code,
+            )
             return jsonify({"error": f"Failed to fetch details from tracker (Status {resp.status_code})"}), 502
 
         details = parse_skt_details_html(resp.text, tid=tid)
         return jsonify(details)
     except Exception as e:
-        logger.error(f"Details fetch exception for tid={tid}: {e}")
+        log_siem_event(
+            logger,
+            logging.ERROR,
+            f"Details fetch exception for tid={tid}: {e}",
+            event="details_fetch_exception",
+            tid=tid,
+            error=str(e),
+        )
         return jsonify({"error": str(e)}), 502
 
 
@@ -210,6 +247,14 @@ def proxy_download():
                 for c in urllib.parse.unquote(filename)
                 if c.isalnum() or c in (" ", ".", "-", "_")
             )
+            log_siem_event(
+                logger,
+                logging.INFO,
+                f"Proxy download served for tid={tid}",
+                event="proxy_download_success",
+                tid=tid,
+                filename=safe_filename,
+            )
             return send_file(
                 io.BytesIO(resp.content),
                 as_attachment=True,
@@ -218,13 +263,30 @@ def proxy_download():
             )
         return f"Failed to download from tracker. Status: {resp.status_code}", 502
     except Exception as e:
+        log_siem_event(
+            logger,
+            logging.ERROR,
+            f"Download proxy error for tid={tid}: {e}",
+            event="proxy_download_error",
+            tid=tid,
+            error=str(e),
+        )
         return f"Download failed: {e}", 502
 
 
 @app.route("/api/send_to_nas", methods=["POST"])
 def send_to_nas():
+    user_email = get_current_user_email()
     if not can_use_nas():
+        log_siem_event(
+            logger,
+            logging.WARNING,
+            f"Unauthorized NAS push attempt by user={user_email}",
+            event="nas_push_forbidden",
+            user_email=user_email,
+        )
         return jsonify({"error": "Forbidden."}), 403
+
     if not ensure_login(skt_session):
         return jsonify({"error": "Failed to authenticate with SkTorrent tracker."}), 502
 
@@ -255,18 +317,38 @@ def send_to_nas():
             )
 
             success, msg = push_to_synology(resp.content, safe_filename)
-            return (
-                jsonify({"success": True, "message": msg})
-                if success
-                else (jsonify({"error": msg}), 502)
-            )
+            if success:
+                log_siem_event(
+                    logger,
+                    logging.INFO,
+                    f"NAS push executed by user={user_email} for tid={tid}",
+                    event="nas_push_executed",
+                    user_email=user_email,
+                    tid=tid,
+                    filename=safe_filename,
+                )
+                return jsonify({"success": True, "message": msg})
+            else:
+                return jsonify({"error": msg}), 502
 
-        logger.error(
-            f"Tracker download failed for tid={tid}. Status: {resp.status_code}, Content-Type: {content_type}, Content prefix: {resp.content[:100]}"
+        log_siem_event(
+            logger,
+            logging.ERROR,
+            f"Tracker download failed for NAS push tid={tid}. Status: {resp.status_code}",
+            event="nas_push_download_failed",
+            tid=tid,
+            status_code=resp.status_code,
         )
         return jsonify({"error": f"Failed to fetch .torrent file from tracker (Status: {resp.status_code})"}), 502
     except Exception as e:
-        logger.error(f"Tracker download exception for tid={tid}: {e}")
+        log_siem_event(
+            logger,
+            logging.ERROR,
+            f"NAS push exception for tid={tid}: {e}",
+            event="nas_push_exception",
+            tid=tid,
+            error=str(e),
+        )
         return jsonify({"error": str(e)}), 502
 
 

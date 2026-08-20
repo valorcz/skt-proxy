@@ -73,12 +73,42 @@
             border-bottom: 1px solid var(--border-color); flex-wrap: wrap; gap: 1rem;
         }
 
+        .brand-group { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+
         .brand-logo {
             display: flex; align-items: center; gap: 0.6rem;
             text-decoration: none; color: inherit;
         }
 
         h1 { margin: 0; font-weight: 800; font-size: 1.6rem; letter-spacing: -0.03em; background: var(--brand-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+        .build-badge {
+            background: rgba(99, 102, 241, 0.15);
+            color: #818cf8;
+            border: 1px solid rgba(99, 102, 241, 0.35);
+            font-size: 0.725rem;
+            font-weight: 600;
+            padding: 0.2rem 0.5rem;
+            border-radius: 6px;
+            letter-spacing: 0.02em;
+        }
+
+        .user-status-group { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+        
+        .user-pill {
+            display: inline-flex; align-items: center; gap: 0.35rem;
+            background: rgba(var(--surface-rgb), 0.6);
+            border: 1px solid var(--border-color);
+            padding: 0.25rem 0.65rem; border-radius: 9999px;
+            font-size: 0.775rem; color: var(--text-main); font-weight: 500;
+            backdrop-filter: blur(8px);
+        }
+        
+        .user-pill.tracker {
+            background: rgba(16, 185, 129, 0.12);
+            color: #34d399;
+            border-color: rgba(16, 185, 129, 0.3);
+        }
 
         .controls { display: flex; gap: 0.6rem; align-items: center; width: 100%; max-width: 360px; }
 
@@ -272,9 +302,26 @@
 <body>
 
     <header>
-        <a href="/" class="brand-logo">
-            <h1>SkT Proxy</h1>
-        </a>
+        <div class="brand-group">
+            <a href="/" class="brand-logo">
+                <h1>SkT Proxy</h1>
+            </a>
+            <span class="build-badge" title="Build Version">{{ app_version }}</span>
+        </div>
+
+        <div class="user-status-group">
+            {% if current_user %}
+                <span class="user-pill" title="Authenticated User">
+                    <svg class="stroke-icon" width="13" height="13" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    {{ current_user }}
+                </span>
+            {% endif %}
+            <span class="user-pill tracker" title="SkTorrent Tracker Account">
+                <svg class="stroke-icon" width="13" height="13" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                SkT: {{ skt_username }}
+            </span>
+        </div>
+
         <div class="controls">
             <div class="search-wrapper">
                 <input type="text" id="searchInput" placeholder="Search title..." onkeyup="handleSearchInput()">
