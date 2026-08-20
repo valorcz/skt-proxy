@@ -5,25 +5,30 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
 
-# Enable bytecode compilation for faster startup
+# Enable bytecode compilation for faster startup & set runtime data directory
 ENV UV_COMPILE_BYTECODE=1
+ENV DATA_DIR="/app/data"
 
-# Copy dependency management files first to leverage Docker cache
+# Ensure data directory exists
+RUN mkdir -p /app/data
+
+# 1. Copy ONLY dependency files to leverage Docker layer caching
 COPY pyproject.toml uv.lock* ./
 
-# Sync dependencies into a virtual environment (excluding dev dependencies)
+# 2. Sync dependencies into virtual environment (excluding dev dependencies)
 RUN uv sync --no-dev --no-install-project
 
-# Copy the rest of the application code
-COPY . .
+# 3. Copy ONLY immutable application source code and documentation
+COPY README.md ./
+COPY src/ ./src/
 
-# Run sync again to install the project itself (if defined in pyproject.toml)
+# 4. Install the project wheel into the virtual environment
 RUN uv sync --no-dev
 
-# Put the virtual environment on the PATH
+# Add virtual environment binaries to PATH
 ENV PATH="/app/.venv/bin:$PATH"
 
 EXPOSE 5000
 
 # Start Gunicorn (single worker, multiple threads for SQLite/memory safety)
-CMD ["gunicorn", "--workers=1", "--threads=4", "--bind=0.0.0.0:5000", "--access-logfile", "-", "--error-logfile", "-", "--log-level", "info", "app:app"]
+CMD ["gunicorn", "--workers=1", "--threads=4", "--bind=0.0.0.0:5000", "--access-logfile", "-", "--error-logfile", "-", "--log-level", "info", "skt_proxy.app:app"]

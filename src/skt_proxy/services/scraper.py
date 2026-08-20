@@ -8,12 +8,12 @@ import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
-import config
-import database
-from services.http_client import get_http_session, ensure_login
-from services.torrent_parser import parse_torrents
-from services.logger import setup_logger, log_siem_event
-from services.models import TorrentDTO
+import skt_proxy.config as config
+import skt_proxy.database as database
+from skt_proxy.services.http_client import get_http_session, ensure_login
+from skt_proxy.services.torrent_parser import parse_torrents
+from skt_proxy.services.logger import setup_logger, log_siem_event
+from skt_proxy.services.models import TorrentDTO
 
 logger = setup_logger("skt-proxy.scraper")
 
@@ -27,7 +27,7 @@ def set_db_was_empty(val: bool):
 
 
 def get_covers_dir():
-    app_module = sys.modules.get("app")
+    app_module = sys.modules.get("skt_proxy.app") or sys.modules.get("app")
     return getattr(app_module, "COVERS_DIR", config.COVERS_DIR)
 
 

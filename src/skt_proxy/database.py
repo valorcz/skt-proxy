@@ -3,8 +3,8 @@ import time
 import json
 import sys
 import logging
-import config
-from services.logger import setup_logger, log_siem_event
+import skt_proxy.config as config
+from skt_proxy.services.logger import setup_logger, log_siem_event
 
 logger = setup_logger("skt-proxy.db")
 
@@ -12,7 +12,7 @@ logger = setup_logger("skt-proxy.db")
 def get_db_path(db_path=None):
     if db_path is not None:
         return db_path
-    app_module = sys.modules.get("app")
+    app_module = sys.modules.get("skt_proxy.app") or sys.modules.get("app")
     if app_module and hasattr(app_module, "DB_PATH"):
         return app_module.DB_PATH
     return config.DB_PATH
@@ -86,8 +86,11 @@ def clear_expired_new_flags(db_path=None):
 
 
 def is_db_empty(db_path=None):
-    with get_db_connection(db_path) as conn:
-        return conn.execute("SELECT COUNT(*) FROM torrents").fetchone()[0] == 0
+    try:
+        with get_db_connection(db_path) as conn:
+            return conn.execute("SELECT COUNT(*) FROM torrents").fetchone()[0] == 0
+    except sqlite3.OperationalError:
+        return True
 
 
 def mark_read(tids, db_path=None):

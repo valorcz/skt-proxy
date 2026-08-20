@@ -1,0 +1,17 @@
+# Docker Build Exclusion Rules
+.git/
+.venv/
+.pytest_cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+data/
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.*
+tests/
+docs/
+scripts/

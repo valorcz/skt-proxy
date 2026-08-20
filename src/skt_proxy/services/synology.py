@@ -1,15 +1,15 @@
 import sys
 import logging
 import requests
-import config
-from services.torrent_parser import torrent_bytes_to_magnet
-from services.logger import setup_logger, log_siem_event
+import skt_proxy.config as config
+from skt_proxy.services.torrent_parser import torrent_bytes_to_magnet
+from skt_proxy.services.logger import setup_logger, log_siem_event
 
 logger = setup_logger("skt-proxy.synology")
 
 
 def get_synology_config():
-    app_module = sys.modules.get("app")
+    app_module = sys.modules.get("skt_proxy.app") or sys.modules.get("app")
     url = getattr(app_module, "SYNOLOGY_URL", config.SYNOLOGY_URL)
     user = getattr(app_module, "SYNOLOGY_USER", config.SYNOLOGY_USER)
     password = getattr(app_module, "SYNOLOGY_PASSWORD", config.SYNOLOGY_PASSWORD)

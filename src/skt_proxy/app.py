@@ -5,18 +5,18 @@ import logging
 from flask import Flask, render_template, request, send_file, send_from_directory, jsonify
 from werkzeug.exceptions import HTTPException
 
-import config
-import database
-from services.http_client import get_http_session, ensure_login, default_session as skt_session
-from services.torrent_parser import (
+import skt_proxy.config as config
+import skt_proxy.database as database
+from skt_proxy.services.http_client import get_http_session, ensure_login, default_session as skt_session
+from skt_proxy.services.torrent_parser import (
     extract_csfd_score,
     torrent_bytes_to_magnet,
     parse_torrents,
     parse_skt_details_html,
 )
-from services import synology
-from services import scraper
-from services.logger import setup_logger, log_siem_event
+from skt_proxy.services import synology
+from skt_proxy.services import scraper
+from skt_proxy.services.logger import setup_logger, log_siem_event
 
 logger = setup_logger("skt-proxy.app")
 
@@ -25,7 +25,7 @@ if "gunicorn" in os.environ.get("SERVER_SOFTWARE", "") or __name__ != "__main__"
     logger.handlers = gunicorn_logger.handlers
     logger.setLevel(gunicorn_logger.level)
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder="templates")
 
 # --- MODULE ATTRIBUTES FOR BACKWARDS COMPATIBILITY & PYTEST PATCHING ---
 DB_PATH = config.DB_PATH
@@ -128,6 +128,7 @@ def index():
             "Proxy failed to authenticate with SkTorrent on index request",
             event="index_auth_failed",
         )
+        return "Proxy unable to authenticate with SkTorrent.", 502
     return render_template(
         "index.html",
         can_use_nas=can_use_nas(),
@@ -352,5 +353,9 @@ def send_to_nas():
         return jsonify({"error": str(e)}), 502
 
 
+def main():
+    app.run(host="0.0.0.0", port=5000, debug=False)
+
+
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    main()

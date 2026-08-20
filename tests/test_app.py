@@ -2,7 +2,8 @@ import json
 import sqlite3
 import pytest
 from unittest.mock import patch, MagicMock
-import app
+from skt_proxy import app
+from skt_proxy.services.torrent_parser import parse_torrents
 
 @pytest.fixture
 def client(tmp_path):
@@ -39,7 +40,7 @@ def test_parse_torrents_html():
     </body>
     </html>
     """
-    torrents = app.parse_torrents(sample_html)
+    torrents = parse_torrents(sample_html)
     assert len(torrents) == 1
     t = torrents[0]
     assert t["id"] == "12345"
@@ -143,5 +144,3 @@ def test_clear_expired_new_flags(tmp_path):
         with sqlite3.connect(db_file) as conn:
             row = conn.execute("SELECT is_new FROM torrents WHERE id='old_id'").fetchone()
             assert row[0] == 0
-
-

@@ -2,15 +2,14 @@ import sqlite3
 import pytest
 from unittest.mock import patch, MagicMock
 
-import config
-import database
-from services.torrent_parser import (
+from skt_proxy import config, database, app
+from skt_proxy.services.torrent_parser import (
     extract_csfd_score,
     torrent_bytes_to_magnet,
     parse_torrents,
     parse_skt_details_html,
 )
-from services.synology import push_to_synology
+from skt_proxy.services.synology import push_to_synology
 
 
 def test_extract_csfd_score():
@@ -56,7 +55,6 @@ def test_database_operations(tmp_path):
 
 
 def test_synology_push_missing_config():
-    import app
     with patch.object(app, "SYNOLOGY_URL", ""):
         success, msg = push_to_synology(b"fake", "fake.torrent")
         assert success is False

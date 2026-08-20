@@ -6,9 +6,7 @@ services:
     env_file:
       - .env
     volumes:
-      - ./downloads:/app/downloads
-      - ./cache.db:/app/cache.db
-      - ./static/covers:/app/static/covers
+      - ./data:/app/data
     expose:
       - "5000"
     ports:
@@ -30,4 +28,3 @@ services:
       - OAUTH2_PROXY_REVERSE_PROXY=true # Required if behind Nginx/Traefik
     depends_on:
       - skt-proxy
-
