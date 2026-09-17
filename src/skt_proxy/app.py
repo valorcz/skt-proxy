@@ -321,7 +321,14 @@ def api_torrent_details():
             )
             return jsonify({"error": f"Failed to fetch details from tracker (Status {resp.status_code})"}), 502
 
-        details = parse_skt_details_html(resp.text, tid=tid)
+        # Look up cached category from SQLite if available
+        category = ""
+        with database.get_db_connection(DB_PATH) as conn:
+            row = conn.execute("SELECT category FROM torrents WHERE id = ?", (tid,)).fetchone()
+            if row and row[0]:
+                category = row[0]
+
+        details = parse_skt_details_html(resp.text, category=category, tid=tid)
         # Ensure poster image is served strictly through the local proxy cache
         if details.get("poster_url"):
             details["poster_url"] = f"/api/cover/{tid}"

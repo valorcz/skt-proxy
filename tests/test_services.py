@@ -253,4 +253,32 @@ def test_extract_quality_tags_from_mediainfo():
     assert "5.1" in tags
 
 
+def test_detect_content_type_speech_music_book_tv():
+    from skt_proxy.services.torrent_parser import detect_content_type
+
+    # Speech / Spoken word
+    assert detect_content_type("Hovorené slovo", "Karel Capek - RUR") == "book"
+    assert detect_content_type("Mluvené slovo", "Sherlock Holmes 01") == "book"
+    assert detect_content_type("", "Agatha Christie (Audiokniha CZ)") == "book"
+
+    # Books
+    assert detect_content_type("Knihy", "Dune Frank Herbert PDF") == "book"
+    assert detect_content_type("E-knihy", "Zaklinac EPUB") == "book"
+    assert detect_content_type("Časopisy", "National Geographic 2026") == "book"
+
+    # Music
+    assert detect_content_type("Hudba", "Pink Floyd - The Wall FLAC") == "music"
+    assert detect_content_type("", "Hans Zimmer - Interstellar Soundtrack 320kbps") == "music"
+    pure_audio_mi = "General\nFormat : FLAC\nAudio #1\nFormat : FLAC"
+    assert detect_content_type("", "Artist - Album", mediainfo=pure_audio_mi) == "music"
+
+    # TV
+    assert detect_content_type("Seriály", "Breaking Bad") == "tv"
+    assert detect_content_type("", "Dark Matter S01E05 1080p") == "tv"
+
+    # Movies
+    assert detect_content_type("Filmy", "Inception 2010 1080p") == "movie"
+
+
+
 

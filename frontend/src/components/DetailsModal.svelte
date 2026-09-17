@@ -93,7 +93,11 @@
               {#if details.content_type === 'tv'}
                 📺 Series {details.season_episode ? `(${details.season_episode})` : ''}
               {:else if details.content_type === 'book'}
-                📚 Book / Audiobook
+                {#if details.category && details.category.toLowerCase().includes('slovo')}
+                  🗣️ Spoken Word / Audiobook
+                {:else}
+                  📚 Book / Audiobook
+                {/if}
               {:else if details.content_type === 'music'}
                 🎵 Music
               {:else if details.content_type === 'software'}

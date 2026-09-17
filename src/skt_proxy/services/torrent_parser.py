@@ -24,18 +24,40 @@ def extract_csfd_score(*texts):
     return None
 
 
-def detect_content_type(category, title):
+def detect_content_type(category, title, mediainfo=""):
     cat_lower = (category or "").lower()
     title_lower = (title or "").lower()
+    m_lower = (mediainfo or "").lower()
 
-    if any(k in cat_lower for k in ["knihy", "časopis", "slovo", "book", "audiobook", "literatúra"]):
+    # 1. Books / Audiobooks / Spoken Word / Speech
+    if (
+        any(k in cat_lower for k in ["knihy", "kniha", "časopis", "casopis", "slovo", "book", "audiobook", "audioknih", "literatúr", "literatur", "ebook", "e-book", "pdf", "rozhlas"])
+        or any(k in title_lower for k in ["audiokniha", "audioknihy", "audiobook", "mluvené slovo", "mluvene slovo", "hovorené slovo", "hovorene slovo", "rozhlasová hra", "rozhlasova hra", "e-book", "ebook", "čtení na pokračování", "cteni na pokracovani"])
+    ):
         return "book"
-    if any(k in cat_lower for k in ["hudba", "music", "album", "discography"]):
+
+    # 2. Music
+    if (
+        any(k in cat_lower for k in ["hudba", "music", "album", "discography", "disko", "flac", "ost", "soundtrack"])
+        or any(k in title_lower for k in ["discography", "diskografie", "soundtrack", "flac", "320kbps", "mp3 album", "singles", "remix"])
+        or (("audio #" in m_lower or "audio\n" in m_lower) and "video #" not in m_lower and "video\n" not in m_lower)
+    ):
         return "music"
-    if any(k in cat_lower for k in ["hry", "game", "aplikáci", "software", "program"]):
+
+    # 3. Software / Games
+    if (
+        any(k in cat_lower for k in ["hry", "game", "aplikáci", "aplikaci", "software", "program", "windows", "android", "pc", "iso"])
+        or any(k in title_lower for k in ["repack", "crack", "keygen", "portable", "patch", "pc game"])
+    ):
         return "software"
-    if any(k in cat_lower for k in ["seriál", "series", "tv"]) or re.search(r"\bS\d{1,2}E\d{1,2}\b|\b\d{1,2}x\d{1,2}\b", title_lower, re.I):
+
+    # 4. TV / Series
+    if (
+        any(k in cat_lower for k in ["seriál", "serial", "series", "tv"])
+        or re.search(r"\b(s\d{1,2}e\d{1,2}|\d{1,2}x\d{1,2}|s\d{1,2}\b|season\s*\d+|komplet\s*seriál)\b", title_lower, re.I)
+    ):
         return "tv"
+
     return "movie"
 
 
@@ -510,12 +532,21 @@ def parse_skt_details_html(html_text, category="", tid=""):
             elif "súbory" in k or "subory" in k or "files" in k:
                 files_text = tds[1].get_text(separator="\n", strip=True)
                 details["files"] = [f.strip() for f in files_text.split("\n") if f.strip()]
+            elif "kategór" in k or "kategor" in k or "category" in k:
+                if not category:
+                    category = v
 
+    if not category:
+        cat_tag = soup.find("a", href=re.compile(r"category=\d+"))
+        if cat_tag:
+            category = cat_tag.get_text(strip=True)
+
+    details["category"] = category
     details["synopsis"] = extract_clean_synopsis(soup)
     details["quality_tags"] = extract_quality_tags(details["title"], details["mediainfo_text"])
 
     details["csfd_score"] = extract_csfd_score(details["title"], details["synopsis"], html_text)
-    details["content_type"] = detect_content_type(category, details["title"])
+    details["content_type"] = detect_content_type(category, details["title"], details["mediainfo_text"])
     details["languages"] = parse_languages(f"{details['title']} {details['synopsis']}")
 
     se_match = re.search(r"\b(S\d{1,2}E\d{1,2}|\d{1,2}x\d{1,2})\b", details["title"], re.I)

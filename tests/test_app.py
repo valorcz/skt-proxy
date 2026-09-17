@@ -293,3 +293,32 @@ def test_api_torrent_details_proxies_poster(client):
         assert "sktorrent_url" in rel
 
 
+def test_api_torrent_details_detects_speech_and_category(client):
+    db_file = app.DB_PATH
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO torrents (id, title, category) VALUES (?, ?, ?)",
+            ("8888", "Karel Capek - RUR", "Hovorené slovo")
+        )
+
+    mock_speech_html = """
+    <html>
+    <body>
+        <table class="main">
+            <tr><td class="heading">Názov</td><td class="rowhead">Karel Capek - RUR (rozhlasova hra)</td></tr>
+            <tr><td class="heading">Popis</td><td class="rowhead"><p>Vyborna rozhlasova hra.</p></td></tr>
+        </table>
+    </body>
+    </html>
+    """
+    with patch.object(app, "ensure_login", return_value=True), \
+         patch.object(app.skt_session, "get") as mock_get:
+        mock_get.return_value = MagicMock(status_code=200, text=mock_speech_html)
+        resp = client.get("/api/torrent_details?id=8888")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["content_type"] == "book"
+        assert data["category"] == "Hovorené slovo"
+
+
+
