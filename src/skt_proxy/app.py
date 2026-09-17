@@ -340,6 +340,14 @@ def api_torrent_details():
                 else:
                     details["poster_url"] = ""
 
+        # Persist databazeknih_url if discovered, or backfill from DB if already known
+        with database.get_db_connection(DB_PATH) as conn:
+            row = conn.execute("SELECT databazeknih_url FROM torrents WHERE id = ?", (tid,)).fetchone()
+            if details.get("databazeknih_url"):
+                conn.execute("UPDATE torrents SET databazeknih_url = ? WHERE id = ?", (details["databazeknih_url"], tid))
+            elif row and row[0]:
+                details["databazeknih_url"] = row[0]
+
         return jsonify(details)
     except Exception as e:
         log_siem_event(

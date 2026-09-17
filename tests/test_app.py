@@ -321,4 +321,46 @@ def test_api_torrent_details_detects_speech_and_category(client):
         assert data["category"] == "Hovorené slovo"
 
 
+def test_api_torrent_details_persists_databazeknih_url(client):
+    db_file = app.DB_PATH
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO torrents (id, title, category) VALUES (?, ?, ?)",
+            ("9991", "Stoparuv pruvodce po Galaxii", "E-knihy")
+        )
 
+    mock_book_html = """
+    <html>
+    <body>
+        <meta itemprop="name" content="Stopařův průvodce po Galaxii">
+        <meta itemprop="description" content="Kultovní sci-fi komedie od Douglase Adamse.">
+        <table class="main">
+            <tr><td class="heading">Názov</td><td class="rowhead">Douglas Adams - Stopařův průvodce</td></tr>
+            <tr><td class="heading">Popis</td><td class="rowhead">
+                <a href="https://www.databazeknih.cz/knihy/stoparuv-pruvodce-po-galaxii-217">Databáze knih</a>
+                <p>Nezapomeňte si ručník!</p>
+            </td></tr>
+        </table>
+    </body>
+    </html>
+    """
+    with patch.object(app, "ensure_login", return_value=True), \
+         patch.object(app.skt_session, "get") as mock_get:
+        mock_get.return_value = MagicMock(status_code=200, text=mock_book_html)
+        resp = client.get("/api/torrent_details?id=9991")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["databazeknih_url"] == "https://www.databazeknih.cz/knihy/stoparuv-pruvodce-po-galaxii-217"
+
+        # Verify persisted into SQLite
+        with sqlite3.connect(db_file) as conn:
+            row = conn.execute("SELECT databazeknih_url FROM torrents WHERE id='9991'").fetchone()
+            assert row[0] == "https://www.databazeknih.cz/knihy/stoparuv-pruvodce-po-galaxii-217"
+
+        # Verify returned in /api/torrents
+        torrents_resp = client.get("/api/torrents")
+        assert torrents_resp.status_code == 200
+        t_list = torrents_resp.get_json()["torrents"]
+        matching = [t for t in t_list if t["id"] == "9991"]
+        assert len(matching) == 1
+        assert matching[0]["databazeknih_url"] == "https://www.databazeknih.cz/knihy/stoparuv-pruvodce-po-galaxii-217"

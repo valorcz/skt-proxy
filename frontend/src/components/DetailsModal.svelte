@@ -138,6 +138,10 @@
               <a href={details.databazeknih_url} target="_blank" rel="noopener noreferrer" class="badge book-link">
                 {@html ICONS.book} Open on Databáze knih
               </a>
+            {:else if details.content_type === 'book'}
+              <a href="https://www.databazeknih.cz/search?q={encodeURIComponent(details.title)}" target="_blank" rel="noopener noreferrer" class="badge book-link">
+                {@html ICONS.book} Search on Databáze knih
+              </a>
             {/if}
 
             {#if details.imdb_url}
@@ -163,6 +167,16 @@
           {#if details.synopsis && details.synopsis.trim().length > 0}
             <div class="section-header">Synopsis / Obsah:</div>
             <div class="synopsis-box">{details.synopsis}</div>
+          {/if}
+
+          <!-- Music Tracklist (Seznam skladeb) -->
+          {#if details.tracklist && details.tracklist.length > 0}
+            <div class="section-header">Seznam skladeb ({details.tracklist.length}):</div>
+            <ol class="tracklist-box">
+              {#each details.tracklist as track}
+                <li class="track-item">{track}</li>
+              {/each}
+            </ol>
           {/if}
 
           <!-- MediaInfo & Codec Specs (Restored to original open format) -->
@@ -420,6 +434,23 @@
     font-size: 0.925rem;
     color: var(--text-main);
     line-height: 1.6;
+  }
+
+  .tracklist-box {
+    background: rgba(var(--surface-rgb), 0.5);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.75rem 1.25rem 0.75rem 2.2rem;
+    margin: 0 0 1.15rem 0;
+    font-size: 0.875rem;
+    color: var(--text-main);
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .track-item {
+    line-height: 1.4;
   }
 
   .trailer-container {

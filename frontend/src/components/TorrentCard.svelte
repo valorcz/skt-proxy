@@ -150,13 +150,13 @@
         </button>
 
         <!-- Slot 3: Book / CSFD Link -->
-        {#if torrent.content_type === 'book'}
+        {#if torrent.databazeknih_url || torrent.content_type === 'book'}
           <a 
-            href="https://www.databazeknih.cz/search?q={encodeURIComponent(torrent.title)}" 
+            href={torrent.databazeknih_url || `https://www.databazeknih.cz/search?q=${encodeURIComponent(torrent.title)}`} 
             target="_blank" 
             rel="noopener noreferrer"
             class="btn btn-book" 
-            title="Search on Databáze knih"
+            title={torrent.databazeknih_url ? "Open on Databáze knih" : "Search on Databáze knih"}
           >
             {@html ICONS.book} Knihy
           </a>

@@ -1,3 +1,4 @@
+import os
 import sqlite3
 import pytest
 from unittest.mock import patch, MagicMock
@@ -280,5 +281,42 @@ def test_detect_content_type_speech_music_book_tv():
     assert detect_content_type("Filmy", "Inception 2010 1080p") == "movie"
 
 
+def test_extract_tracklist_and_anthrax_fixture():
+    fixture_path = "/home/valor/.gemini/antigravity-cli/brain/cf89c166-f781-40b5-9c71-60da142b2ecb/scratch/anthrax_details.html"
+    if os.path.exists(fixture_path):
+        with open(fixture_path, "r", encoding="utf-8") as f:
+            html = f.read()
+        res = parse_skt_details_html(html, category="Hudba", tid="d052cec135c49179905e2515570ab60bea837186")
+        assert res["content_type"] == "music"
+        assert len(res["tracklist"]) == 11
+        assert res["tracklist"][0] == "01. Persistence of Memory"
+        assert res["tracklist"][10] == "11. My Victory"
+        assert res["music_meta"].get("year") == "2026"
+        assert res["music_meta"].get("codec") == "MP3"
+        assert res["music_meta"].get("bitrate") == "320 kbps"
+        assert "320 kbps" in res["quality_tags"]
+        assert "MP3" in res["quality_tags"]
 
 
+def test_extract_databazeknih_url():
+    from bs4 import BeautifulSoup
+    from skt_proxy.services.torrent_parser import extract_databazeknih_url
+
+    # HTML with anchor
+    html_a = """
+    <div>
+        Popis knihy: skvělý román.
+        <a href="https://www.databazeknih.cz/knihy/stoparuv-pruvodce-po-galaxii-217">Profil na Databázi knih</a>
+    </div>
+    """
+    soup_a = BeautifulSoup(html_a, "html.parser")
+    assert extract_databazeknih_url(soup_a, html_a) == "https://www.databazeknih.cz/knihy/stoparuv-pruvodce-po-galaxii-217"
+
+    # Plain text URL
+    html_plain = """
+    <div>
+        Více info zde: https://databazeknih.cz/dalsi-vydani/zaklinac-posledni-prani-23941
+    </div>
+    """
+    soup_plain = BeautifulSoup(html_plain, "html.parser")
+    assert extract_databazeknih_url(soup_plain, html_plain) == "https://databazeknih.cz/dalsi-vydani/zaklinac-posledni-prani-23941"

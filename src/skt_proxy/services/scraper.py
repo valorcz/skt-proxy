@@ -69,6 +69,7 @@ def fetch_extras_task(torrent_id, image_url, needs_img, needs_csfd, db_path=None
             local_img_path = f"/static/covers/{local_filename}"
 
     csfd_id = None
+    databazeknih_url = None
     if needs_csfd:
         try:
             resp = session.get(
@@ -78,32 +79,43 @@ def fetch_extras_task(torrent_id, image_url, needs_img, needs_csfd, db_path=None
                 match = re.search(r"csfd\.cz/film/(\d+)", resp.text)
                 if match:
                     csfd_id = match.group(1)
+                try:
+                    from bs4 import BeautifulSoup
+                    from skt_proxy.services.torrent_parser import extract_databazeknih_url
+
+                    soup = BeautifulSoup(resp.text, "html.parser")
+                    databazeknih_url = extract_databazeknih_url(soup, resp.text)
+                except Exception as parse_err:
+                    logger.debug(f"Could not extract databazeknih_url for {torrent_id}: {parse_err}")
         except Exception as e:
             log_siem_event(
                 logger,
                 logging.WARNING,
-                f"CSFD ID fetch failed for {torrent_id}: {e}",
-                event="csfd_fetch_failed",
+                f"Details extras fetch failed for {torrent_id}: {e}",
+                event="extras_fetch_failed",
                 torrent_id=torrent_id,
                 error=str(e),
             )
 
-    if local_img_path or csfd_id:
+    updates = []
+    params = []
+    if local_img_path:
+        updates.append("local_image=?")
+        params.append(local_img_path)
+    if csfd_id:
+        updates.append("csfd_id=?")
+        params.append(csfd_id)
+    if databazeknih_url:
+        updates.append("databazeknih_url=?")
+        params.append(databazeknih_url)
+
+    if updates:
+        params.append(torrent_id)
         with database.get_db_connection(db_path) as conn:
-            if local_img_path and csfd_id:
-                conn.execute(
-                    "UPDATE torrents SET local_image=?, csfd_id=? WHERE id=?",
-                    (local_img_path, csfd_id, torrent_id),
-                )
-            elif local_img_path:
-                conn.execute(
-                    "UPDATE torrents SET local_image=? WHERE id=?",
-                    (local_img_path, torrent_id),
-                )
-            elif csfd_id:
-                conn.execute(
-                    "UPDATE torrents SET csfd_id=? WHERE id=?", (csfd_id, torrent_id)
-                )
+            conn.execute(
+                f"UPDATE torrents SET {', '.join(updates)} WHERE id=?",
+                tuple(params),
+            )
 
 
 def sync_tracker_feed(category="0", db_path=None, max_pages=3) -> int:
@@ -167,7 +179,7 @@ def sync_tracker_feed(category="0", db_path=None, max_pages=3) -> int:
             with database.get_db_connection(db_path) as conn:
                 placeholders = ",".join("?" * len(tids))
                 rows = conn.execute(
-                    f"SELECT id, is_new, local_image, csfd_id, csfd_score, created_at FROM torrents WHERE id IN ({placeholders})",
+                    f"SELECT id, is_new, local_image, csfd_id, csfd_score, created_at, databazeknih_url FROM torrents WHERE id IN ({placeholders})",
                     tids,
                 ).fetchall()
                 existing = {r[0]: r for r in rows}
@@ -182,6 +194,7 @@ def sync_tracker_feed(category="0", db_path=None, max_pages=3) -> int:
                         csfd_id = row[3]
                         csfd_score = t.get("csfd_score") or row[4]
                         created_at = row[5] or now
+                        databazeknih_url = row[6] if len(row) > 6 else None
                     else:
                         # Newly encountered torrent
                         if is_initialized:
@@ -193,22 +206,23 @@ def sync_tracker_feed(category="0", db_path=None, max_pages=3) -> int:
                         csfd_id = None
                         csfd_score = t.get("csfd_score")
                         created_at = now
+                        databazeknih_url = None
 
-                    if not local_img or not csfd_id:
+                    if not local_img or (not csfd_id and not databazeknih_url):
                         background_worker.submit(
                             fetch_extras_task,
                             t["id"],
                             t["image_url"],
                             not local_img,
-                            not csfd_id,
+                            not csfd_id and not databazeknih_url,
                             db_path,
                         )
 
                     conn.execute(
                         """
                         INSERT OR REPLACE INTO torrents
-                        (id, title, category, category_id, genres, size, added_date, seeders, leechers, download_link, is_new, image_url, local_image, csfd_id, csfd_score, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        (id, title, category, category_id, genres, size, added_date, seeders, leechers, download_link, is_new, image_url, local_image, csfd_id, csfd_score, created_at, databazeknih_url)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             t["id"],
@@ -227,6 +241,7 @@ def sync_tracker_feed(category="0", db_path=None, max_pages=3) -> int:
                             csfd_id,
                             csfd_score,
                             created_at,
+                            databazeknih_url,
                         ),
                     )
 

@@ -47,6 +47,10 @@ def init_db(db_path=None):
             conn.execute("ALTER TABLE torrents ADD COLUMN created_at REAL")
         except sqlite3.OperationalError:
             pass
+        try:
+            conn.execute("ALTER TABLE torrents ADD COLUMN databazeknih_url TEXT")
+        except sqlite3.OperationalError:
+            pass
 
         # Indexes for fast pagination, filtering, and unread lookups
         conn.execute("CREATE INDEX IF NOT EXISTS idx_torrents_added_date ON torrents (added_date DESC);")
