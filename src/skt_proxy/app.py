@@ -1,5 +1,6 @@
 import os
 import io
+import re
 import urllib.parse
 import logging
 from flask import Flask, render_template, request, send_file, send_from_directory, jsonify
@@ -116,9 +117,74 @@ def favicon():
 @app.route("/static/covers/<path:filename>")
 def serve_cover(filename):
     """Serve cached cover images with 7-day immutable Cache-Control headers."""
-    response = send_from_directory(config.COVERS_DIR, filename)
+    response = send_from_directory(COVERS_DIR, filename)
     response.headers["Cache-Control"] = "public, max-age=604800, immutable"
     return response
+
+
+@app.route("/api/cover/<tid>")
+def api_cover(tid):
+    """On-demand proxy and caching endpoint for torrent cover images."""
+    covers_dir = COVERS_DIR
+    os.makedirs(covers_dir, exist_ok=True)
+
+    # 1. Check if {tid}.* already exists on disk
+    for fname in os.listdir(covers_dir):
+        if fname.startswith(f"{tid}."):
+            response = send_from_directory(covers_dir, fname)
+            response.headers["Cache-Control"] = "public, max-age=604800, immutable"
+            return response
+
+    # 2. Discover image URL from SQLite or tracker details page
+    image_url = None
+    with database.get_db_connection(DB_PATH) as conn:
+        row = conn.execute("SELECT image_url FROM torrents WHERE id = ?", (tid,)).fetchone()
+        if row and row[0]:
+            image_url = row[0]
+
+    if not image_url:
+        try:
+            resp = skt_session.get(f"https://sktorrent.eu/torrent/details.php?id={tid}", timeout=10)
+            if resp.status_code == 200:
+                match = re.search(
+                    r'src=["\'](//cdn\.sktorrent\.eu/obrazky/[^"\']+|https?://[^"\']+\.(?:jpg|jpeg|png|webp))["\']',
+                    resp.text,
+                    re.I,
+                )
+                if match:
+                    src = match.group(1)
+                    if src.startswith("//"):
+                        src = "https:" + src
+                    image_url = src
+        except Exception as e:
+            logger.warning(f"Failed to scrape cover URL for {tid}: {e}")
+
+    if not image_url:
+        return "", 404
+
+    # 3. Fetch image on server and cache to disk
+    try:
+        ext = image_url.split(".")[-1].split("?")[0].lower()
+        if len(ext) > 4 or not ext or ext not in ["jpg", "jpeg", "png", "webp"]:
+            ext = "jpg"
+        local_filename = f"{tid}.{ext}"
+        local_path = os.path.join(covers_dir, local_filename)
+
+        resp = skt_session.get(image_url, timeout=12)
+        if resp.status_code == 200 and resp.content:
+            with open(local_path, "wb") as f:
+                f.write(resp.content)
+            local_rel = f"/static/covers/{local_filename}"
+            with database.get_db_connection(DB_PATH) as conn:
+                conn.execute("UPDATE torrents SET local_image = ? WHERE id = ?", (local_rel, tid))
+
+            response = send_from_directory(covers_dir, local_filename)
+            response.headers["Cache-Control"] = "public, max-age=604800, immutable"
+            return response
+    except Exception as e:
+        logger.warning(f"Failed to download and cache cover for {tid}: {e}")
+
+    return "", 404
 
 
 @app.route("/")
@@ -256,6 +322,17 @@ def api_torrent_details():
             return jsonify({"error": f"Failed to fetch details from tracker (Status {resp.status_code})"}), 502
 
         details = parse_skt_details_html(resp.text, tid=tid)
+        # Ensure poster image is served strictly through the local proxy cache
+        if details.get("poster_url"):
+            details["poster_url"] = f"/api/cover/{tid}"
+        else:
+            with database.get_db_connection(DB_PATH) as conn:
+                row = conn.execute("SELECT local_image, image_url FROM torrents WHERE id = ?", (tid,)).fetchone()
+                if row and (row[0] or row[1]):
+                    details["poster_url"] = f"/api/cover/{tid}"
+                else:
+                    details["poster_url"] = ""
+
         return jsonify(details)
     except Exception as e:
         log_siem_event(

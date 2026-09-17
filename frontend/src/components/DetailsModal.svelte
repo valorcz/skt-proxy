@@ -46,12 +46,6 @@
     return 'bad';
   }
 
-  function copyInfohash(hash) {
-    navigator.clipboard.writeText(hash).then(() => {
-      alert(`Copied Infohash to clipboard:\n${hash}`);
-    }).catch(() => {});
-  }
-
   function handleOverlayClick(e) {
     if (e.target === e.currentTarget) {
       onClose();
@@ -84,7 +78,13 @@
           <p class="error-text">Error loading details: {error}</p>
         {:else if details}
           {#if details.poster_url}
-            <img class="detail-poster" src={details.poster_url} alt="Poster" />
+            <img 
+              class="detail-poster" 
+              src={details.poster_url} 
+              alt="Poster" 
+              loading="lazy"
+              onerror={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
           {/if}
 
           <div class="modal-meta">
@@ -110,14 +110,14 @@
               </span>
             {/if}
 
-            <!-- Quality Badges -->
+            <!-- Quality & Codec Badges -->
             {#if details.quality_tags}
               {#each details.quality_tags as q}
                 <span class="badge quality-badge">{q}</span>
               {/each}
             {/if}
 
-            <!-- External Links -->
+            <!-- External Links: Tracker + Review Sites -->
             {#if details.sktorrent_url}
               <a href={details.sktorrent_url} target="_blank" rel="noopener noreferrer" class="badge skt">
                 {@html ICONS.globe} Open on SkTorrent.eu
@@ -149,21 +149,9 @@
               {/each}
             {/if}
 
-            <!-- File Size, Uploader, Infohash -->
+            <!-- File Size -->
             {#if details.size}
               <span class="badge">Size: {details.size}</span>
-            {/if}
-            {#if details.uploader}
-              <span class="badge">Uploader: {details.uploader}</span>
-            {/if}
-            {#if details.infohash}
-              <button 
-                class="badge hash-badge" 
-                onclick={() => copyInfohash(details.infohash)} 
-                title="Click to copy Infohash"
-              >
-                Hash: {details.infohash} {@html ICONS.copy}
-              </button>
             {/if}
           </div>
 
@@ -171,6 +159,22 @@
           {#if details.synopsis && details.synopsis.trim().length > 0}
             <div class="section-header">Synopsis / Obsah:</div>
             <div class="synopsis-box">{details.synopsis}</div>
+          {/if}
+
+          <!-- MediaInfo & Codec Specs (Restored to original open format) -->
+          {#if details.mediainfo_text && details.mediainfo_text.trim().length > 0}
+            <div class="section-header">
+              {#if details.content_type === 'music'}
+                Tracklist & Audio Specs:
+              {:else if details.content_type === 'book'}
+                Book & File Details:
+              {:else}
+                MediaInfo & Codec Specs:
+              {/if}
+            </div>
+            <div class="mediainfo-box">
+              <pre>{details.mediainfo_text}</pre>
+            </div>
           {/if}
 
           <!-- Trailer -->
@@ -185,7 +189,7 @@
             </div>
           {/if}
 
-          <!-- Related Torrents -->
+          <!-- Related Torrents with direct actions -->
           {#if details.related_torrents && details.related_torrents.length > 0}
             <div class="section-header">Other Versions & Copies on SkTorrent ({details.related_torrents.length}):</div>
             <div class="related-box">
@@ -196,50 +200,34 @@
                     <button 
                       class="btn btn-secondary small-btn" 
                       onclick={() => onOpenOtherDetails(r.id)}
+                      title="View Details"
                     >
                       {@html ICONS.info} Info
                     </button>
-                    <a 
-                      href={r.sktorrent_url} 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
-                      class="btn btn-secondary small-btn"
-                    >
-                      {@html ICONS.globe} SkT
-                    </a>
+                    {#if r.download_link}
+                      <a 
+                        href={r.download_link} 
+                        class="btn small-btn" 
+                        title="Download Torrent"
+                      >
+                        {@html ICONS.download}
+                      </a>
+                    {/if}
+                    {#if r.sktorrent_url}
+                      <a 
+                        href={r.sktorrent_url} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        class="btn btn-secondary small-btn"
+                        title="Open on SkTorrent.eu"
+                      >
+                        {@html ICONS.globe} SkT
+                      </a>
+                    {/if}
                   </div>
                 </div>
               {/each}
             </div>
-          {/if}
-
-          <!-- Files in Torrent -->
-          {#if details.files && details.files.length > 0}
-            <div class="section-header">Files in Torrent ({details.files.length}):</div>
-            <ul class="files-list">
-              {#each details.files as f}
-                <li>{f}</li>
-              {/each}
-            </ul>
-          {/if}
-
-          <!-- Technical MediaInfo / Tracklist -->
-          {#if details.mediainfo_text && details.mediainfo_text.trim().length > 0}
-            {#if details.content_type === 'music' && /^\s*\d+[\.\-\s]/m.test(details.mediainfo_text)}
-              <div class="section-header">Tracklist:</div>
-              <div class="mediainfo-box">
-                <pre>{details.mediainfo_text}</pre>
-              </div>
-            {:else}
-              <details class="technical-details">
-                <summary>
-                  ⚙ Technical Stream & Encoding Specs (Raw MediaInfo)
-                </summary>
-                <div class="mediainfo-box inner-box">
-                  <pre>{details.mediainfo_text}</pre>
-                </div>
-              </details>
-            {/if}
           {/if}
         {/if}
       </div>
@@ -411,10 +399,6 @@
     font-weight: 600;
   }
 
-  .hash-badge {
-    cursor: pointer;
-  }
-
   .section-header {
     font-weight: 600;
     font-size: 0.9rem;
@@ -480,44 +464,6 @@
     width: auto !important;
   }
 
-  .files-list {
-    list-style: none;
-    padding: 0;
-    margin: 0 0 1.15rem 0;
-    font-family: monospace;
-    font-size: 0.8rem;
-    background: rgba(var(--surface-rgb), 0.3);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    max-height: 180px;
-    overflow-y: auto;
-  }
-  .files-list li {
-    padding: 0.35rem 0.75rem;
-    border-bottom: 1px solid var(--border-color);
-    word-break: break-all;
-  }
-  .files-list li:last-child { border-bottom: none; }
-
-  .technical-details {
-    margin-top: 1.25rem;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 0.65rem 0.85rem;
-    background: rgba(var(--surface-rgb), 0.4);
-  }
-
-  .technical-details summary {
-    cursor: pointer;
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    user-select: none;
-  }
-
   .mediainfo-box {
     background: rgba(0, 0, 0, 0.45);
     border: 1px solid var(--border-color);
@@ -527,11 +473,6 @@
     overflow-x: auto;
     max-height: 250px;
     overflow-y: auto;
-  }
-  .mediainfo-box.inner-box {
-    margin-top: 0.75rem;
-    margin-bottom: 0;
-    max-height: 220px;
   }
 
   .mediainfo-box pre {

@@ -219,3 +219,77 @@ def test_static_dist_assets_served(client):
             resp = client.get(f"/static/dist/assets/{asset}")
             assert resp.status_code == 200
 
+
+def test_api_cover_cached_hit(client, tmp_path):
+    covers_dir = app.COVERS_DIR
+    os.makedirs(covers_dir, exist_ok=True)
+    cover_file = os.path.join(covers_dir, "5555.jpg")
+    with open(cover_file, "wb") as f:
+        f.write(b"\xff\xd8\xff\xe0testimage")
+
+    resp = client.get("/api/cover/5555")
+    assert resp.status_code == 200
+    assert resp.data == b"\xff\xd8\xff\xe0testimage"
+    assert "immutable" in resp.headers.get("Cache-Control", "")
+
+
+def test_api_cover_on_demand_fetch(client):
+    db_file = app.DB_PATH
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO torrents (id, title, image_url) VALUES (?, ?, ?)",
+            ("7777", "Test Movie", "https://sktorrent.eu/torrent/images/cover7777.jpg")
+        )
+
+    with patch.object(app.skt_session, "get") as mock_get:
+        mock_get.return_value = MagicMock(status_code=200, content=b"downloaded_cover_bytes")
+        resp = client.get("/api/cover/7777")
+        assert resp.status_code == 200
+        assert resp.data == b"downloaded_cover_bytes"
+
+        # Verify cached to disk
+        cover_path = os.path.join(app.COVERS_DIR, "7777.jpg")
+        assert os.path.exists(cover_path)
+
+        # Verify DB updated
+        with sqlite3.connect(db_file) as conn:
+            local_img = conn.execute("SELECT local_image FROM torrents WHERE id='7777'").fetchone()[0]
+            assert local_img == "/static/covers/7777.jpg"
+
+
+def test_api_cover_not_found(client):
+    with patch.object(app.skt_session, "get") as mock_get:
+        mock_get.return_value = MagicMock(status_code=404, text="")
+        resp = client.get("/api/cover/999999")
+        assert resp.status_code == 404
+
+
+def test_api_torrent_details_proxies_poster(client):
+    mock_details_html = """
+    <html>
+    <body>
+        <table class="main">
+            <tr><td class="heading">Názov</td><td class="rowhead">Avatar 2009</td></tr>
+            <tr><td class="heading">Popis</td><td class="rowhead">
+                <img src="https://cdn.sktorrent.eu/obrazky/123456.jpg" />
+                <p>Pandora story.</p>
+                <a href="details.php?id=abcdef1234567890abcdef1234567890abcdef12">Avatar 1080p</a>
+            </td></tr>
+        </table>
+    </body>
+    </html>
+    """
+    with patch.object(app, "ensure_login", return_value=True), \
+         patch.object(app.skt_session, "get") as mock_get:
+        mock_get.return_value = MagicMock(status_code=200, text=mock_details_html)
+        resp = client.get("/api/torrent_details?id=123456")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["poster_url"] == "/api/cover/123456"
+        assert len(data["related_torrents"]) == 1
+        rel = data["related_torrents"][0]
+        assert "download_link" in rel
+        assert "/proxy_download?id=" in rel["download_link"]
+        assert "sktorrent_url" in rel
+
+

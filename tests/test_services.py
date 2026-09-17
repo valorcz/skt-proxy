@@ -224,3 +224,33 @@ def test_extract_clean_synopsis_returns_empty_when_only_encoding_specs():
     assert synopsis == ""
 
 
+def test_extract_quality_tags_from_mediainfo():
+    # Title without codec or resolution
+    title = "Kralik.Jojo.2019.SK.CZ.DABING"
+    mediainfo = """
+    General
+    Format : Matroska
+    File size : 4.50 GiB
+    Duration : 1 h 48 min
+    Overall bit rate : 5 950 kb/s
+
+    Video #1
+    Format : HEVC
+    Format/Info : High Efficiency Video Coding
+    Width : 1 920 pixels
+    Height : 1 080 pixels
+    Writing library : x265
+    HDR format : SMPTE ST 2086, HDR10 compatible
+
+    Audio #1
+    Format : E-AC-3
+    Channel(s) : 6 channels
+    """
+    tags = extract_quality_tags(title, mediainfo)
+    assert "1080p" in tags
+    assert "HEVC/x265" in tags
+    assert "HDR" in tags
+    assert "5.1" in tags
+
+
+

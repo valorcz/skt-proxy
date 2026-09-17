@@ -358,8 +358,14 @@ def get_torrents(page=0, categories=None, genres=None, new_only=False, db_path=N
         rows = conn.execute(query, params).fetchall()
         db_torrents = [dict(r) for r in rows]
 
+    covers_dir = get_covers_dir()
     for t in db_torrents:
-        t["display_image"] = t["local_image"] if t["local_image"] else t["image_url"]
+        has_local = False
+        if t["local_image"]:
+            filename = os.path.basename(t["local_image"])
+            has_local = os.path.exists(os.path.join(covers_dir, filename))
+
+        t["display_image"] = t["local_image"] if has_local else f"/api/cover/{t['id']}"
         t["genres"] = json.loads(t["genres"]) if t["genres"] else []
         t["content_type"] = detect_content_type(t.get("category", ""), t.get("title", ""))
         t["languages"] = parse_languages(t.get("title", ""))

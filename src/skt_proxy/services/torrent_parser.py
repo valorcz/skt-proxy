@@ -224,17 +224,18 @@ def parse_torrents(html_content):
     return torrents
 
 
-def extract_quality_tags(title: str) -> list[str]:
-    """Extracts clean, high-level resolution, source, and codec badges from release title."""
+def extract_quality_tags(title: str, mediainfo_text: str = "") -> list[str]:
+    """Extracts clean, high-level resolution, source, and codec badges from release title and mediainfo."""
     tags = []
     t_lower = (title or "").lower()
+    m_lower = (mediainfo_text or "").lower()
 
     # Resolution
-    if re.search(r"\b(2160p|4k|uhd)\b", t_lower):
+    if re.search(r"\b(2160p|4k|uhd)\b", t_lower) or re.search(r"\b(3840\s*x\s*2160|width\s*:\s*3\s*840)\b", m_lower):
         tags.append("4K UHD")
-    elif re.search(r"\b(1080p|1080i|fhd)\b", t_lower):
+    elif re.search(r"\b(1080p|1080i|fhd)\b", t_lower) or re.search(r"\b(1920\s*x\s*1080|width\s*:\s*1\s*920)\b", m_lower):
         tags.append("1080p")
-    elif re.search(r"\b(720p|hd)\b", t_lower):
+    elif re.search(r"\b(720p|hd)\b", t_lower) or re.search(r"\b(1280\s*x\s*720|width\s*:\s*1\s*280)\b", m_lower):
         tags.append("720p")
     elif re.search(r"\b(576p|480p|sd)\b", t_lower):
         tags.append("SD")
@@ -252,20 +253,35 @@ def extract_quality_tags(title: str) -> list[str]:
         tags.append("HDTV")
 
     # Video Codec
-    if re.search(r"\b(x265|hevc|h\.?265)\b", t_lower):
+    if re.search(r"\b(x265|hevc|h\.?265)\b", t_lower) or "format : hevc" in m_lower or "writing library : x265" in m_lower:
         tags.append("HEVC/x265")
-    elif re.search(r"\b(x264|avc|h\.?264)\b", t_lower):
+    elif re.search(r"\b(x264|avc|h\.?264)\b", t_lower) or "format : avc" in m_lower or "writing library : x264" in m_lower:
         tags.append("AVC/x264")
-    elif re.search(r"\bav1\b", t_lower):
+    elif re.search(r"\bav1\b", t_lower) or "format : av1" in m_lower:
         tags.append("AV1")
 
     # Dynamic Range
-    if re.search(r"\b(hdr10\+|hdr10|hdr)\b", t_lower):
+    if re.search(r"\b(hdr10\+|hdr10|hdr)\b", t_lower) or "hdr" in m_lower:
         tags.append("HDR")
-    if re.search(r"\b(dolby[\s.]*vision|dovi|\bdv\b)", t_lower):
+    if re.search(r"\b(dolby[\s.]*vision|dovi|\bdv\b)", t_lower) or "dolby vision" in m_lower:
         tags.append("DV")
 
-    return tags
+    # Audio Channels / Specs (if prominent)
+    if re.search(r"\b(atmos|dolby atmos)\b", t_lower) or "atmos" in m_lower:
+        tags.append("Atmos")
+    elif re.search(r"\b(7\.1|8\s*channels?)\b", t_lower) or "8 channels" in m_lower:
+        tags.append("7.1")
+    elif re.search(r"\b(5\.1|6\s*channels?)\b", t_lower) or "6 channels" in m_lower:
+        tags.append("5.1")
+
+    # Deduplicate while maintaining order
+    seen = set()
+    deduped = []
+    for tag in tags:
+        if tag not in seen:
+            seen.add(tag)
+            deduped.append(tag)
+    return deduped
 
 
 def is_technical_encoding_line(line: str) -> bool:
@@ -396,9 +412,12 @@ def extract_related_torrents(soup, current_tid=""):
             rel_title = a.text.strip()
             if rel_id not in seen_ids and rel_title and len(rel_title) > 3:
                 seen_ids.add(rel_id)
+                formatted_title = rel_title.replace(" ", "_") + ".torrent"
+                dl_link = f"/proxy_download?id={rel_id}&f={urllib.parse.quote(formatted_title)}"
                 related.append({
                     "id": rel_id,
                     "title": rel_title,
+                    "download_link": dl_link,
                     "sktorrent_url": f"https://sktorrent.eu/torrent/details.php?id={rel_id}",
                 })
     return related
@@ -493,7 +512,7 @@ def parse_skt_details_html(html_text, category="", tid=""):
                 details["files"] = [f.strip() for f in files_text.split("\n") if f.strip()]
 
     details["synopsis"] = extract_clean_synopsis(soup)
-    details["quality_tags"] = extract_quality_tags(details["title"])
+    details["quality_tags"] = extract_quality_tags(details["title"], details["mediainfo_text"])
 
     details["csfd_score"] = extract_csfd_score(details["title"], details["synopsis"], html_text)
     details["content_type"] = detect_content_type(category, details["title"])
