@@ -58,8 +58,10 @@ def get_db_connection():
     return database.get_db_connection(DB_PATH)
 
 
-def get_torrents(page=0, categories=None, genres=None):
-    return scraper.get_torrents(page=page, categories=categories, genres=genres, db_path=DB_PATH)
+def get_torrents(page=0, categories=None, genres=None, new_only=False):
+    return scraper.get_torrents(
+        page=page, categories=categories, genres=genres, new_only=new_only, db_path=DB_PATH
+    )
 
 
 # Initialize DB schema on module load
@@ -129,6 +131,11 @@ def index():
             event="index_auth_failed",
         )
         return "Proxy unable to authenticate with SkTorrent.", 502
+
+    dist_index = os.path.join(app.root_path, "static", "dist", "index.html")
+    if os.path.exists(dist_index):
+        return send_file(dist_index)
+
     return render_template(
         "index.html",
         can_use_nas=can_use_nas(),
@@ -136,6 +143,16 @@ def index():
         current_user=get_current_user_email(),
         skt_username=config.SKT_USERNAME,
     )
+
+
+@app.route("/api/config")
+def api_config():
+    return jsonify({
+        "app_version": config.APP_VERSION,
+        "current_user": get_current_user_email(),
+        "skt_username": config.SKT_USERNAME,
+        "can_use_nas": can_use_nas(),
+    })
 
 
 @app.route("/api/genres")
@@ -156,12 +173,63 @@ def api_torrents():
     page = request.args.get("page", 0, type=int)
     cat_str = request.args.get("categories", "")
     genre_str = request.args.get("genres", "")
+    new_only = request.args.get("new_only", "false").lower() in ("true", "1", "yes")
 
     categories = [c for c in cat_str.split(",") if c]
     genres = [g for g in genre_str.split(",") if g]
 
-    torrents = get_torrents(page=page, categories=categories, genres=genres)
-    return jsonify({"torrents": torrents, "can_use_nas": can_use_nas()})
+    torrents = get_torrents(page=page, categories=categories, genres=genres, new_only=new_only)
+    unread_count = database.get_unread_count(DB_PATH)
+    scrape_cat = categories[0] if (categories and len(categories) == 1) else "0"
+    sync_info = database.get_sync_state(scrape_cat, DB_PATH)
+
+    return jsonify({
+        "torrents": torrents,
+        "can_use_nas": can_use_nas(),
+        "unread_count": unread_count,
+        "last_synced": sync_info.get("last_synced", 0),
+        "page": page,
+        "has_more": len(torrents) >= getattr(config, "PAGE_SIZE", 40),
+    })
+
+
+@app.route("/api/mark_all_read", methods=["POST"])
+def mark_all_read():
+    if not ensure_login(skt_session):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    count = database.mark_all_read(DB_PATH)
+    return jsonify({"success": True, "count": count, "unread_count": 0})
+
+
+@app.route("/api/sync_status")
+def api_sync_status():
+    if not ensure_login(skt_session):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    category = request.args.get("category", "0")
+    state = database.get_sync_state(category, DB_PATH)
+    unread_count = database.get_unread_count(DB_PATH)
+    return jsonify({
+        "last_synced": state.get("last_synced", 0),
+        "new_items": state.get("new_items", 0),
+        "unread_count": unread_count,
+    })
+
+
+@app.route("/api/sync", methods=["POST"])
+def api_sync():
+    if not ensure_login(skt_session):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    payload = request.json or {}
+    category = payload.get("category", "0")
+    new_count = scraper.sync_tracker_feed(category=category, db_path=DB_PATH)
+    return jsonify({
+        "success": True,
+        "new_items": new_count,
+        "unread_count": database.get_unread_count(DB_PATH),
+    })
 
 
 @app.route("/api/torrent_details")

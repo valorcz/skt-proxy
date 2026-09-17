@@ -1,3 +1,4 @@
+import os
 import json
 import sqlite3
 import pytest
@@ -144,3 +145,77 @@ def test_clear_expired_new_flags(tmp_path):
         with sqlite3.connect(db_file) as conn:
             row = conn.execute("SELECT is_new FROM torrents WHERE id='old_id'").fetchone()
             assert row[0] == 0
+
+
+def test_api_mark_all_read_endpoint(client):
+    db_file = app.DB_PATH
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("INSERT INTO torrents (id, title, is_new) VALUES (?, ?, ?)", ("1001", "Movie 1", True))
+        conn.execute("INSERT INTO torrents (id, title, is_new) VALUES (?, ?, ?)", ("1002", "Movie 2", True))
+
+    resp = client.post("/api/mark_all_read")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["success"] is True
+    assert data["count"] == 2
+
+    with sqlite3.connect(db_file) as conn:
+        rows = conn.execute("SELECT is_new FROM torrents WHERE is_new = 1").fetchall()
+        assert len(rows) == 0
+
+
+def test_api_sync_status_endpoint(client):
+    resp = client.get("/api/sync_status?category=0")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert "last_synced" in data
+    assert "new_items" in data
+    assert "unread_count" in data
+
+
+def test_api_torrents_with_new_only(client):
+    db_file = app.DB_PATH
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("INSERT INTO torrents (id, title, is_new, added_date) VALUES (?, ?, ?, ?)", ("2001", "Old Film", False, "2026-09-01"))
+        conn.execute("INSERT INTO torrents (id, title, is_new, added_date) VALUES (?, ?, ?, ?)", ("2002", "Fresh Film", True, "2026-09-02"))
+
+    resp_all = client.get("/api/torrents?new_only=false")
+    assert resp_all.status_code == 200
+    all_data = resp_all.get_json()
+    assert len(all_data["torrents"]) == 2
+    assert all_data["unread_count"] == 1
+
+    resp_new = client.get("/api/torrents?new_only=true")
+    assert resp_new.status_code == 200
+    new_data = resp_new.get_json()
+    assert len(new_data["torrents"]) == 1
+    assert new_data["torrents"][0]["id"] == "2002"
+
+
+def test_api_config_endpoint(client):
+    resp = client.get("/api/config")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert "app_version" in data
+    assert "skt_username" in data
+    assert "can_use_nas" in data
+    assert "current_user" in data
+
+
+def test_index_endpoint_serves_spa(client):
+    with patch.object(app, "ensure_login", return_value=True):
+        resp = client.get("/")
+        assert resp.status_code == 200
+        # Check that it serves either the built SPA HTML or the template fallback
+        assert b"SkT Proxy" in resp.data
+
+
+def test_static_dist_assets_served(client):
+    # Verify that Flask serves the built JS/CSS bundle
+    dist_dir = os.path.join(app.app.root_path, "static", "dist", "assets")
+    if os.path.exists(dist_dir):
+        assets = os.listdir(dist_dir)
+        for asset in assets:
+            resp = client.get(f"/static/dist/assets/{asset}")
+            assert resp.status_code == 200
+

@@ -44,7 +44,9 @@ NAS_ALLOWED_EMAILS = [
 
 # --- APP & RUNTIME DATA PATHS ---
 DATA_DIR = os.environ.get("DATA_DIR", "data")
-CACHE_EXPIRY = 300  # seconds (5 min)
+CACHE_EXPIRY = int(os.environ.get("CACHE_EXPIRY", "300"))  # seconds (5 min)
+PAGE_SIZE = int(os.environ.get("PAGE_SIZE", "40"))
+NEW_FLAG_EXPIRY_SECONDS = int(os.environ.get("NEW_FLAG_EXPIRY_SECONDS", "172800"))  # 48 hours
 
 DB_PATH = os.path.join(DATA_DIR, "cache.db")
 COVERS_DIR = os.path.join(DATA_DIR, "covers")

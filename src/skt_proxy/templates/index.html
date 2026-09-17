@@ -228,6 +228,37 @@
         .action-stack { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.35rem; }
         .action-grid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 0.35rem; }
 
+        .card.is-new {
+            border-color: rgba(99, 102, 241, 0.45);
+            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.16);
+        }
+        .btn-nas-confirm {
+            background: rgba(245, 158, 11, 0.2) !important;
+            border-color: rgba(245, 158, 11, 0.6) !important;
+            color: #fbbf24 !important;
+            font-weight: 700 !important;
+        }
+        .new-releases-pill {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            background: var(--brand-gradient);
+            color: #ffffff;
+            padding: 0.5rem 1.25rem;
+            border-radius: 9999px;
+            margin: 0 auto 1.5rem auto;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.85rem;
+            box-shadow: 0 8px 25px rgba(99, 102, 241, 0.35);
+            transition: var(--transition);
+            max-width: fit-content;
+        }
+        .new-releases-pill:hover {
+            transform: translateY(-2px) scale(1.03);
+        }
+
         #loadMoreContainer { text-align: center; max-width: 200px; margin: 0 auto; }
         
         .skeleton { background: var(--border-color); height: 320px; width: 100%; animation: pulse 1.5s infinite ease-in-out; }
@@ -320,6 +351,10 @@
                 <svg class="stroke-icon" width="13" height="13" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
                 SkT: {{ skt_username }}
             </span>
+            <button class="user-pill" id="markAllReadBtn" onclick="markAllAsRead()" title="Mark all new items as read" style="display: none; cursor: pointer; border-color: rgba(99, 102, 241, 0.4);">
+                <svg class="stroke-icon" width="13" height="13" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                Mark all read
+            </button>
         </div>
 
         <div class="controls">
@@ -336,6 +371,11 @@
     </header>
 
     <div class="filters-container">
+       <div class="filter-row" id="scopeRow">
+            <span class="filter-label">Feed:</span>
+            <button class="pill" id="newOnlyBtn" onclick="toggleNewOnly()">⚡ New Only (<span id="unreadCountBadge">0</span>)</button>
+       </div>
+
        <div class="filter-row" id="categoryRow">
             <span class="filter-label">Categories:</span>
        </div>
@@ -349,6 +389,10 @@
             </div>
             <div id="activeGenresContainer" style="display: flex; gap: 0.4rem; flex-wrap: wrap; margin-left: 0.4rem;"></div>
         </div>
+    </div>
+
+    <div id="newReleasesBanner" class="new-releases-pill" onclick="fetchTorrents(true)">
+        ✦ New releases found on tracker — Click to refresh
     </div>
 
     <main class="grid" id="torrentGrid">
@@ -419,7 +463,28 @@
                 if (!event.target.matches('#genreDropdownBtn') && !event.target.closest('#genreDropdownContent')) {
                     document.getElementById("genreDropdownContent").classList.remove('show');
                 }
-            }
+            };
+
+            // Background notification check every 60 seconds
+            setInterval(async () => {
+                try {
+                    const catQuery = selectedCategories.length === 1 ? selectedCategories[0] : '0';
+                    const res = await fetch(`/api/sync_status?category=${catQuery}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.new_items > 0) {
+                            const banner = document.getElementById('newReleasesBanner');
+                            if (banner) {
+                                banner.innerText = `✦ ${data.new_items} new release(s) available on tracker — Click to refresh`;
+                                banner.style.display = 'flex';
+                            }
+                        }
+                        if (typeof data.unread_count === 'number') {
+                            updateUnreadCountBadge(data.unread_count, true);
+                        }
+                    }
+                } catch (e) {}
+            }, 60000);
         });
 
         // --- Search ---
@@ -533,40 +598,80 @@
             if (isNaN(num)) return 'neutral';
             if (num >= 70) return 'good';
             if (num >= 50) return 'avg';
-            return 'bad';
+        // --- State & Read Tracking ---
+        let isNewOnly = false;
+        let currentUnreadCount = 0;
+
+        function toggleNewOnly() {
+            isNewOnly = !isNewOnly;
+            const btn = document.getElementById('newOnlyBtn');
+            btn.classList.toggle('active', isNewOnly);
+            fetchTorrents(true);
         }
 
-        // --- Viewport Observer for "New" Badge Removal ---
-        const newBadgeObserver = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    const card = entry.target;
-                    const id = card.getAttribute('data-id');
-                    if (id && card.getAttribute('data-new') === 'true') {
+        function updateUnreadCountBadge(count, isAbsolute = false) {
+            if (isAbsolute) {
+                currentUnreadCount = Math.max(0, count);
+            } else {
+                currentUnreadCount = Math.max(0, currentUnreadCount + count);
+            }
+            const badge = document.getElementById('unreadCountBadge');
+            if (badge) badge.innerText = currentUnreadCount;
+            
+            const markAllBtn = document.getElementById('markAllReadBtn');
+            if (markAllBtn) {
+                markAllBtn.style.display = currentUnreadCount > 0 ? 'inline-flex' : 'none';
+            }
+        }
+
+        async function markItemRead(id) {
+            const card = document.querySelector(`article[data-id="${id}"]`);
+            if (card && card.getAttribute('data-new') === 'true') {
+                card.setAttribute('data-new', 'false');
+                card.classList.remove('is-new');
+                const badge = card.querySelector('.badge.new');
+                if (badge) {
+                    badge.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                    badge.style.opacity = '0';
+                    badge.style.transform = 'scale(0.7)';
+                    setTimeout(() => badge.remove(), 300);
+                }
+                updateUnreadCountBadge(-1);
+
+                fetch('/api/mark_read', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: id })
+                }).catch(err => console.error('Failed to mark read:', err));
+            }
+        }
+
+        async function markAllAsRead() {
+            try {
+                const res = await fetch('/api/mark_all_read', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    document.querySelectorAll('.card.is-new').forEach(card => {
+                        card.classList.remove('is-new');
                         card.setAttribute('data-new', 'false');
-                        newBadgeObserver.unobserve(card);
-
                         const badge = card.querySelector('.badge.new');
-                        if (badge) {
-                            badge.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
-                            badge.style.opacity = '0';
-                            badge.style.transform = 'scale(0.7)';
-                            setTimeout(() => badge.remove(), 400);
-                        }
-
-                        fetch('/api/mark_read', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ id: id })
-                        }).catch(err => console.error('Failed to mark read:', err));
+                        if (badge) badge.remove();
+                    });
+                    updateUnreadCountBadge(0, true);
+                    if (isNewOnly) {
+                        fetchTorrents(true);
                     }
                 }
-            });
-        }, { threshold: 0.5 });
+            } catch (err) {
+                console.error('Failed to mark all as read:', err);
+            }
+        }
 
         async function fetchTorrents(reset = false) {
             const grid = document.getElementById('torrentGrid');
             const btn = document.getElementById('loadMoreBtn');
+            const banner = document.getElementById('newReleasesBanner');
+            if (banner && reset) banner.style.display = 'none';
             
             if (reset) {
                 currentPage = 0;
@@ -582,26 +687,31 @@
             const genreQuery = selectedGenres.join(',');
             
             try {
-                const response = await fetch(`/api/torrents?page=${currentPage}&categories=${catQuery}&genres=${genreQuery}`);
+                const response = await fetch(`/api/torrents?page=${currentPage}&categories=${catQuery}&genres=${genreQuery}&new_only=${isNewOnly}`);
                 const data = await response.json();
                 
                 if (reset) grid.innerHTML = '';
                 
-                if (data.torrents.length === 0) {
-                    if (reset) grid.innerHTML = '<p style="color: var(--text-muted); grid-column: 1/-1;">No results found for these filters.</p>';
+                if (typeof data.unread_count === 'number') {
+                    updateUnreadCountBadge(data.unread_count, true);
+                }
+
+                if (!data.torrents || data.torrents.length === 0) {
+                    if (reset) {
+                        grid.innerHTML = `<p style="color: var(--text-muted); grid-column: 1/-1;">${isNewOnly ? 'No new unread torrents found.' : 'No results found for these filters.'}</p>`;
+                    }
                     btn.innerText = "No more items";
+                    btn.disabled = true;
                     btn.style.display = reset ? 'none' : 'inline-block';
                     return;
                 }
 
                 data.torrents.forEach(t => {
                     const article = document.createElement('article');
-                    article.className = 'card';
-                    
+                    article.className = t.is_new ? 'card is-new' : 'card';
+                    article.setAttribute('data-id', t.id);
                     if (t.is_new) {
-                        article.setAttribute('data-id', t.id);
                         article.setAttribute('data-new', 'true');
-                        newBadgeObserver.observe(article);
                     }
                     
                     let newBadge = t.is_new ? '<span class="badge new">New</span>' : '';
@@ -620,7 +730,7 @@
 
                     // --- STABLE BUTTON SLOTS (2x2 Grid) ---
                     // Slot 1 (Top-Left): Download
-                    let btnSlot1 = `<a href="${t.download_link}" class="btn">${ICONS.download} Download</a>`;
+                    let btnSlot1 = `<a href="${t.download_link}" onclick="markItemRead('${t.id}')" class="btn">${ICONS.download} Download</a>`;
                     
                     // Slot 2 (Top-Right): Info
                     let btnSlot2 = `<button class="btn btn-secondary" onclick="openDetailsModal('${t.id}')">${ICONS.info} Info</button>`;
@@ -676,8 +786,13 @@
 
                 filterLocalTorrents();
                 btn.style.display = 'inline-block';
-                btn.disabled = false;
-                btn.innerText = "Load More";
+                if (data.has_more === false || data.torrents.length < 40) {
+                    btn.innerText = "No more items";
+                    btn.disabled = true;
+                } else {
+                    btn.innerText = "Load More";
+                    btn.disabled = false;
+                }
                 
             } catch (error) {
                 btn.innerText = "Error loading";
@@ -689,6 +804,7 @@
 
         // --- Details Reader Modal ---
         async function openDetailsModal(id) {
+            markItemRead(id);
             const modal = document.getElementById('detailsModal');
             const modalTitle = document.getElementById('modalTitle');
             const modalBody = document.getElementById('modalBody');
@@ -723,6 +839,10 @@
                     scoreBadge = `<span class="badge csfd ${scClass}">${ICONS.star} Score: ${data.csfd_score}</span>`;
                 }
 
+                let qualityBadges = (data.quality_tags && data.quality_tags.length > 0)
+                    ? data.quality_tags.map(q => `<span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.35); font-weight: 600;">${q}</span>`).join('')
+                    : '';
+
                 let sktBtn = data.sktorrent_url ? `<a href="${data.sktorrent_url}" target="_blank" class="badge skt">${ICONS.globe} Open on SkTorrent.eu</a>` : '';
                 let csfdBtn = data.csfd_url ? `<a href="${data.csfd_url}" target="_blank" class="badge csfd">${ICONS.csfd} Open on ČSFD.cz</a>` : '';
                 let bookBtn = data.databazeknih_url ? `<a href="${data.databazeknih_url}" target="_blank" class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); font-weight: 600;">${ICONS.book} Open on Databáze knih</a>` : '';
@@ -739,13 +859,25 @@
                 
                 let mediainfoHtml = '';
                 if (data.mediainfo_text && data.mediainfo_text.trim().length > 0) {
-                    let headerTitle = (data.content_type === 'music') ? 'Tracklist & Audio Specs:' : ((data.content_type === 'book') ? 'Book & File Details:' : 'MediaInfo & Codec Specs:');
-                    mediainfoHtml = `
-                        <div class="mediainfo-header">${headerTitle}</div>
-                        <div class="mediainfo-box">
-                            <pre>${data.mediainfo_text}</pre>
-                        </div>
-                    `;
+                    if (data.content_type === 'music' && /^\s*\d+[\.\-\s]/m.test(data.mediainfo_text)) {
+                        mediainfoHtml = `
+                            <div class="mediainfo-header">Tracklist:</div>
+                            <div class="mediainfo-box">
+                                <pre>${data.mediainfo_text}</pre>
+                            </div>
+                        `;
+                    } else {
+                        mediainfoHtml = `
+                            <details class="technical-details" style="margin-top: 1.25rem; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.65rem 0.85rem; background: rgba(var(--surface-rgb), 0.4);">
+                                <summary style="cursor: pointer; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); display: flex; align-items: center; gap: 0.4rem; user-select: none;">
+                                    ⚙ Technical Stream & Encoding Specs (Raw MediaInfo)
+                                </summary>
+                                <div class="mediainfo-box" style="margin-top: 0.75rem; margin-bottom: 0; max-height: 220px;">
+                                    <pre>${data.mediainfo_text}</pre>
+                                </div>
+                            </details>
+                        `;
+                    }
                 }
 
                 let trailerHtml = '';
@@ -791,20 +923,21 @@
                     <div class="modal-meta">
                         ${typeBadge}
                         ${scoreBadge}
+                        ${qualityBadges}
                         ${sktBtn}
                         ${csfdBtn}
                         ${bookBtn}
                         ${imdbBtn}
                         ${langPills}
-                        ${uploaderMeta}
                         ${sizeMeta}
+                        ${uploaderMeta}
                         ${hashMeta}
                     </div>
                     ${synopsisHtml}
-                    ${mediainfoHtml}
                     ${trailerHtml}
                     ${relatedHtml}
                     ${filesHtml}
+                    ${mediainfoHtml}
                 `;
             } catch (err) {
                 modalBody.innerHTML = `<p style="color: var(--leech-color);">Network error: ${err.message}</p>`;
@@ -828,11 +961,31 @@
             if (e.key === 'Escape') closeDetailsModal();
         });
 
-        // --- NAS Upload Handler ---
+        // --- NAS Upload Handler with 2-Step Inline Confirmation ---
         async function sendToNas(btnElement) {
+            // Stage 1: Request Confirmation
+            if (btnElement.getAttribute('data-confirming') !== 'true') {
+                btnElement.setAttribute('data-confirming', 'true');
+                btnElement._prevHtml = btnElement.innerHTML;
+                btnElement.innerHTML = `${ICONS.nas} Confirm NAS?`;
+                btnElement.classList.add('btn-nas-confirm');
+
+                btnElement._confirmTimer = setTimeout(() => {
+                    btnElement.removeAttribute('data-confirming');
+                    btnElement.innerHTML = btnElement._prevHtml || `${ICONS.nas} NAS`;
+                    btnElement.classList.remove('btn-nas-confirm');
+                }, 3500);
+                return;
+            }
+
+            // Stage 2: Confirmed execution
+            clearTimeout(btnElement._confirmTimer);
+            btnElement.removeAttribute('data-confirming');
+            btnElement.classList.remove('btn-nas-confirm');
+
             const id = btnElement.getAttribute('data-id');
             const f = btnElement.getAttribute('data-filename');
-            const originalText = btnElement.innerText;
+            const originalHtml = btnElement._prevHtml || btnElement.innerHTML;
             btnElement.innerText = "Sending...";
             btnElement.disabled = true;
 
@@ -856,17 +1009,18 @@
                     btnElement.innerText = "Sent";
                     btnElement.style.borderColor = "var(--seed-color)";
                     btnElement.style.color = "var(--seed-color)";
+                    markItemRead(id);
                 } else {
                     alert("Failed: " + (result.error || result.message || `HTTP ${response.status}`));
                     btnElement.innerText = "Error";
                 }
             } catch (error) {
                 alert(error.message || ("Network error: " + error));
-                btnElement.innerText = originalText;
+                btnElement.innerHTML = originalHtml;
             }
             
             setTimeout(() => {
-                btnElement.innerText = originalText;
+                btnElement.innerHTML = originalHtml;
                 btnElement.style.borderColor = "";
                 btnElement.style.color = "";
                 btnElement.disabled = false;

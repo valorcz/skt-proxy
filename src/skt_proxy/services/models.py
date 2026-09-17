@@ -49,6 +49,7 @@ class TorrentDetailsDTO:
     uploader: str = ""
     added_date: str = ""
     languages: List[str] = field(default_factory=list)
+    quality_tags: List[str] = field(default_factory=list)
     files: List[str] = field(default_factory=list)
     related_torrents: List[dict] = field(default_factory=list)
 

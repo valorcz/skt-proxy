@@ -224,43 +224,163 @@ def parse_torrents(html_content):
     return torrents
 
 
+def extract_quality_tags(title: str) -> list[str]:
+    """Extracts clean, high-level resolution, source, and codec badges from release title."""
+    tags = []
+    t_lower = (title or "").lower()
+
+    # Resolution
+    if re.search(r"\b(2160p|4k|uhd)\b", t_lower):
+        tags.append("4K UHD")
+    elif re.search(r"\b(1080p|1080i|fhd)\b", t_lower):
+        tags.append("1080p")
+    elif re.search(r"\b(720p|hd)\b", t_lower):
+        tags.append("720p")
+    elif re.search(r"\b(576p|480p|sd)\b", t_lower):
+        tags.append("SD")
+
+    # Source
+    if re.search(r"\bremux\b", t_lower):
+        tags.append("Remux")
+    elif re.search(r"\b(bluray|bdrip|brrip)\b", t_lower):
+        tags.append("BluRay")
+    elif re.search(r"\b(web-?dl|webrip)\b", t_lower):
+        tags.append("WEB")
+    elif re.search(r"\b(dvdrip|dvd)\b", t_lower):
+        tags.append("DVD")
+    elif re.search(r"\bhdtv\b", t_lower):
+        tags.append("HDTV")
+
+    # Video Codec
+    if re.search(r"\b(x265|hevc|h\.?265)\b", t_lower):
+        tags.append("HEVC/x265")
+    elif re.search(r"\b(x264|avc|h\.?264)\b", t_lower):
+        tags.append("AVC/x264")
+    elif re.search(r"\bav1\b", t_lower):
+        tags.append("AV1")
+
+    # Dynamic Range
+    if re.search(r"\b(hdr10\+|hdr10|hdr)\b", t_lower):
+        tags.append("HDR")
+    if re.search(r"\b(dolby[\s.]*vision|dovi|\bdv\b)", t_lower):
+        tags.append("DV")
+
+    return tags
+
+
+def is_technical_encoding_line(line: str) -> bool:
+    """Returns True if a line consists of technical MediaInfo, stream, or encoding parameters."""
+    l = line.strip()
+    if not l:
+        return True
+
+    # Tracker noise / boilerplate
+    if any(k in l for k in [
+        "Rolovatelne Media Info", "Podakuj za torrent", "Pridaj vlastnu verziu",
+        "Text bude automaticky centrovany", "Darovat seedbodov", "http://", "https://"
+    ]):
+        return True
+
+    # MediaInfo Section Headers
+    if re.match(r"^(?:General|Hlavné|Hlavní|Video|Obraz|Audio|Zvuk|Text|Titulky|Menu|Chapters|Kapitoly)(?:\s*#\d+)?\s*$", l, re.I):
+        return True
+
+    # Standard MediaInfo Key: Value patterns
+    if re.match(
+        r"^(?:Format|Formát|Format/Info|Format_Profile|Format_Settings|Codec|Codec\s*ID|Kodek|"
+        r"Bit\s*rate|Bitrate|Dátový\s*tok|Datovy\s*tok|Celkový\s*dátový\s*tok|Overall\s*bit\s*rate|"
+        r"Width|Height|Resolution|Rozlíšenie|Rozlišení|Display\s*aspect\s*ratio|Pomer\s*strán|"
+        r"Frame\s*rate|Snímková\s*frekvencia|Framerate|FPS|Scan\s*type|"
+        r"Color\s*space|Chroma\s*subsampling|Bit\s*depth|"
+        r"Stream\s*size|Veľkosť\s*streamu|Velikost\s*streamu|"
+        r"Writing\s*(?:library|application)|Použitá\s*knižnica|Knihovna|"
+        r"Encoding\s*settings|Nastavenia\s*kódovania|Nastavení\s*enkódování|"
+        r"Channel\(s\)|Kanál\(y\)|Sampling\s*rate|Vzorkovacia\s*frekvencia|Compression\s*mode|"
+        r"Unique\s*ID|Complete\s*name|File\s*size|Duration|Trvanie|Délka)[\s:]+",
+        l,
+        re.I,
+    ):
+        return True
+
+    # Encoder settings dumps (e.g. cabac=1 / ref=4 / deblock=1:0:0...)
+    if re.search(r"\b(?:cabac=\d|ref=\d|deblock=|analyse=|me_hex|subme=\d|rc=2pass|aq=\d)\b", l, re.I):
+        return True
+
+    # Inline stream parameter dumps (e.g. "1920x1080 23.976fps x264 5000kbps AC3 5.1")
+    if re.search(r"\b(?:\d{3,4}x\d{3,4}|\d{3,4}p)\b", l, re.I) and any(
+        k in l.lower() for k in ["fps", "kbps", "mbps", "x264", "x265", "hevc", "avc", "ac3", "dts", "aac"]
+    ):
+        return True
+
+    # Metadata headers that aren't synopsis
+    if re.match(r"^(?:Jazyk|Language|Audio|Video|Titulky|Subtitles|Veľkosť|Velkost|Size|Hash|Info_Hash|Seed|Leech)[\s:]", l, re.I):
+        return True
+
+    return False
+
+
 def find_main_content_td(soup):
-    candidates = soup.find_all("td", class_="lista")
-    for td in candidates:
+    # 1. Search for table row with Popis / Description / Obsah
+    for tr in soup.find_all("tr"):
+        tds = tr.find_all("td")
+        if len(tds) >= 2:
+            heading = tds[0].get_text(strip=True).lower()
+            if "popis" in heading or "description" in heading or "obsah" in heading:
+                return tds[1]
+
+    # 2. Fallback to candidate td elements
+    for td in soup.find_all("td", class_="lista"):
         text = td.get_text(separator=" ", strip=True)
-        if len(text) > 150 and any(k in text for k in ["Obsah", "Popis", "Media info", "Mediainfo", "CSFD", "csfd", "databazeknih", "Format", "Formát", "Video"]):
-            return td, text
-    return None, ""
+        if len(text) > 100 and any(k in text for k in ["Obsah", "Popis", "CSFD", "csfd", "databazeknih", "Dej", "Film"]):
+            return td
+    return None
 
 
 def extract_clean_synopsis(soup):
-    td, text = find_main_content_td(soup)
-    if not td or not text:
+    td = find_main_content_td(soup)
+    if not td:
         return ""
 
-    # 1. Search for Obsah: / Popis: / Dej: / Summary: / Plot: / Popis filmu:
-    m = re.search(
-        r"(?:Obsah|Popis|Dej|Summary|Plot|Popis\s+filmu)[\s:]+(.*?)(?=\s*(?:-|–|\n|\r)*\s*(?:Media\s*info|Mediainfo|Formát|Format|Video|Audio|CSFD|ČSFD|https?://|Darovat|Pridaj|$))",
-        text,
+    # Replace breaks and paragraph boundaries with newlines
+    for br in td.find_all(["br", "hr"]):
+        br.replace_with("\n")
+    for block in td.find_all(["p", "div"]):
+        block.append("\n")
+
+    raw_text = td.get_text()
+
+    # Search for an explicit Obsah / Popis block if marked
+    obsah_match = re.search(
+        r"(?:Obsah|Popis|Dej|Summary|Plot|Popis\s+filmu)[\s:]+(.*?)(?=(?:\n\s*){2,}(?:Media\s*info|Video|Audio|CSFD|ČSFD|https?://|$))",
+        raw_text,
         re.I | re.DOTALL,
     )
-    if m:
-        syn = m.group(1).strip()
-        syn = re.sub(r"[\s\-–:=]+$", "", syn)
-        syn = re.sub(r"\s+", " ", syn).strip()
-        syn = re.sub(r"\(\s*\(\s*([^()]+?)\s*-\s*\)\s*\)", r"(\1)", syn)
-        if len(syn) > 15 and not any(k in syn for k in ["Matroska", "Codec ID", "Video ID", "Overall bit rate"]):
-            return syn
+    candidate_text = obsah_match.group(1) if obsah_match else raw_text
 
-    # 2. Try tag-level extraction for clean paragraphs
-    clean_paras = []
-    for p in td.find_all(["p", "div", "span", "i", "font"]):
-        pt = p.get_text(strip=True)
-        if len(pt) > 40 and not any(k in pt for k in ["http://", "https://", "Mediainfo", "Format", "Formát", "BitRate", "Bit rate", "Codec", "Matroska", "Overall bit rate", "Stream size", "Frame rate", "Resolution", "Rolovatelne", "Podakuj za torrent", "Text bude automaticky centrovany", "Pridaj vlastnu verziu", "Darovat seedbodov"]):
-            if pt not in clean_paras and not re.search(r"^(Jazyk|Titulky|Size|Velikost|Velkost|Kategória|Zaner|Hash|Seed|Leech)[\s:]", pt, re.I):
-                clean_paras.append(pt)
-    if clean_paras:
-        return "\n\n".join(clean_paras)
+    clean_lines = []
+    for raw_line in candidate_text.split("\n"):
+        line = raw_line.strip()
+        if not line:
+            if clean_lines and clean_lines[-1] != "":
+                clean_lines.append("")
+            continue
+
+        # Strip heading label from start of line if present
+        line = re.sub(r"^(?:Obsah|Popis|Dej|Summary|Plot|Popis\s+filmu)[\s:]+", "", line, flags=re.I).strip()
+        if not line:
+            continue
+
+        if is_technical_encoding_line(line):
+            continue
+
+        clean_lines.append(line)
+
+    result = "\n".join(clean_lines).strip()
+    result = re.sub(r"\n{3,}", "\n\n", result)
+
+    # Require at least 20 characters of genuine narrative text
+    if len(result) >= 20 and not is_technical_encoding_line(result):
+        return result
 
     return ""
 
@@ -298,6 +418,7 @@ def parse_skt_details_html(html_text, category="", tid=""):
         "imdb_url": "",
         "content_type": "movie",
         "languages": [],
+        "quality_tags": [],
         "season_episode": "",
         "synopsis": "",
         "mediainfo_text": "",
@@ -372,6 +493,7 @@ def parse_skt_details_html(html_text, category="", tid=""):
                 details["files"] = [f.strip() for f in files_text.split("\n") if f.strip()]
 
     details["synopsis"] = extract_clean_synopsis(soup)
+    details["quality_tags"] = extract_quality_tags(details["title"])
 
     details["csfd_score"] = extract_csfd_score(details["title"], details["synopsis"], html_text)
     details["content_type"] = detect_content_type(category, details["title"])

@@ -1,3 +1,13 @@
+# Stage 1: Build Svelte 5 SPA
+FROM node:22-alpine AS frontend-builder
+WORKDIR /app/frontend
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci || npm install
+COPY frontend/ ./
+ENV VITE_OUT_DIR=dist
+RUN npm run build
+
+# Stage 2: Python runtime
 FROM python:3.12-slim
 
 # Copy the uv binary from the official image
@@ -22,7 +32,10 @@ RUN uv sync --no-dev --no-install-project
 COPY README.md ./
 COPY src/ ./src/
 
-# 4. Install the project wheel into the virtual environment
+# 4. Copy built Svelte SPA from frontend-builder into static/dist
+COPY --from=frontend-builder /app/frontend/dist/ ./src/skt_proxy/static/dist/
+
+# 5. Install the project wheel into the virtual environment
 RUN uv sync --no-dev
 
 # Add virtual environment binaries to PATH
