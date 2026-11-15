@@ -75,6 +75,8 @@ def get_current_user_email():
     email = request.headers.get("X-Forwarded-Email", "").strip().lower()
     if not email:
         email = request.headers.get("Remote-Email", "").strip().lower()
+    if not email:
+        email = request.headers.get("Cf-Access-Authenticated-User-Email", "").strip().lower()
     return email
 
 
