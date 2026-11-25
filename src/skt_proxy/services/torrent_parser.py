@@ -6,6 +6,40 @@ from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
+ALLOWED_YOUTUBE_HOSTS = {
+    "youtube.com",
+    "www.youtube.com",
+    "youtube-nocookie.com",
+    "www.youtube-nocookie.com",
+}
+
+
+def sanitize_http_url(url: str) -> str:
+    """Returns url only if it uses an explicit http or https scheme with a valid host."""
+    if not url:
+        return ""
+    candidate = url.strip()
+    if candidate.startswith("//"):
+        candidate = "https:" + candidate
+    parsed = urllib.parse.urlparse(candidate)
+    if parsed.scheme in ("http", "https") and parsed.netloc:
+        return candidate
+    return ""
+
+
+def sanitize_youtube_embed_url(url: str) -> str:
+    """Returns a safe https:// YouTube embed URL if the host is allowlisted, else ''."""
+    candidate = sanitize_http_url(url)
+    if not candidate:
+        return ""
+    parsed = urllib.parse.urlparse(candidate)
+    host = (parsed.hostname or "").lower()
+    if host not in ALLOWED_YOUTUBE_HOSTS:
+        return ""
+    if parsed.scheme == "http":
+        return parsed._replace(scheme="https").geturl()
+    return candidate
+
 
 def extract_csfd_score(*texts):
     for text in texts:
@@ -24,18 +58,40 @@ def extract_csfd_score(*texts):
     return None
 
 
-def detect_content_type(category, title):
+def detect_content_type(category, title, mediainfo=""):
     cat_lower = (category or "").lower()
     title_lower = (title or "").lower()
+    m_lower = (mediainfo or "").lower()
 
-    if any(k in cat_lower for k in ["knihy", "časopis", "slovo", "book", "audiobook", "literatúra"]):
+    # 1. Books / Audiobooks / Spoken Word / Speech
+    if (
+        any(k in cat_lower for k in ["knihy", "kniha", "časopis", "casopis", "slovo", "book", "audiobook", "audioknih", "literatúr", "literatur", "ebook", "e-book", "pdf", "rozhlas"])
+        or any(k in title_lower for k in ["audiokniha", "audioknihy", "audiobook", "mluvené slovo", "mluvene slovo", "hovorené slovo", "hovorene slovo", "rozhlasová hra", "rozhlasova hra", "e-book", "ebook", "čtení na pokračování", "cteni na pokracovani"])
+    ):
         return "book"
-    if any(k in cat_lower for k in ["hudba", "music", "album", "discography"]):
+
+    # 2. Music
+    if (
+        any(k in cat_lower for k in ["hudba", "music", "album", "discography", "disko", "flac", "ost", "soundtrack"])
+        or any(k in title_lower for k in ["discography", "diskografie", "soundtrack", "flac", "320kbps", "mp3 album", "singles", "remix"])
+        or (("audio #" in m_lower or "audio\n" in m_lower) and "video #" not in m_lower and "video\n" not in m_lower)
+    ):
         return "music"
-    if any(k in cat_lower for k in ["hry", "game", "aplikáci", "software", "program"]):
+
+    # 3. Software / Games
+    if (
+        any(k in cat_lower for k in ["hry", "game", "aplikáci", "aplikaci", "software", "program", "windows", "android", "pc", "iso"])
+        or any(k in title_lower for k in ["repack", "crack", "keygen", "portable", "patch", "pc game"])
+    ):
         return "software"
-    if any(k in cat_lower for k in ["seriál", "series", "tv"]) or re.search(r"\bS\d{1,2}E\d{1,2}\b|\b\d{1,2}x\d{1,2}\b", title_lower, re.I):
+
+    # 4. TV / Series
+    if (
+        any(k in cat_lower for k in ["seriál", "serial", "series", "tv"])
+        or re.search(r"\b(s\d{1,2}e\d{1,2}|\d{1,2}x\d{1,2}|s\d{1,2}\b|season\s*\d+|komplet\s*seriál)\b", title_lower, re.I)
+    ):
         return "tv"
+
     return "movie"
 
 
@@ -58,73 +114,85 @@ def parse_languages(text):
     return sorted(list(found))
 
 
+def _bdecode_next(data: bytes, idx: int, track_info: bool = False):
+    """
+    Decodes a single bencoded value starting at data[idx].
+    Returns (value, next_idx, info_span) where info_span is (start, end) of top-level b'info' bytes.
+    """
+    if idx >= len(data):
+        raise ValueError("Unexpected end of bencoded data")
+
+    token = data[idx:idx + 1]
+    if token == b"i":
+        end = data.index(b"e", idx + 1)
+        return int(data[idx + 1:end]), end + 1, None
+
+    if token == b"l":
+        items = []
+        pos = idx + 1
+        while data[pos:pos + 1] != b"e":
+            val, pos, _ = _bdecode_next(data, pos)
+            items.append(val)
+        return items, pos + 1, None
+
+    if token == b"d":
+        mapping = {}
+        info_span = None
+        pos = idx + 1
+        while data[pos:pos + 1] != b"e":
+            key, pos, _ = _bdecode_next(data, pos)
+            val_start = pos
+            val, pos, _ = _bdecode_next(data, pos)
+            if track_info and key == b"info" and isinstance(val, dict):
+                info_span = (val_start, pos)
+            mapping[key] = val
+        return mapping, pos + 1, info_span
+
+    if token.isdigit():
+        colon = data.index(b":", idx)
+        length = int(data[idx:colon])
+        start = colon + 1
+        end = start + length
+        if end > len(data):
+            raise ValueError("Bencoded string exceeds buffer length")
+        return data[start:end], end, None
+
+    raise ValueError(f"Invalid bencode token at offset {idx}: {token!r}")
+
+
 def torrent_bytes_to_magnet(file_bytes):
     """
     Extracts infohash, title, and all tracker URLs from raw .torrent file bytes and builds a magnet URI.
     """
     try:
-        info_start = file_bytes.find(b"4:info")
-        if info_start == -1:
-            return None
-        dict_start = info_start + 6
-        if file_bytes[dict_start:dict_start + 1] != b"d":
+        decoded, _, info_span = _bdecode_next(file_bytes, 0, track_info=True)
+        if not isinstance(decoded, dict) or not info_span:
             return None
 
-        depth = 0
-        i = dict_start
-        while i < len(file_bytes):
-            char = file_bytes[i:i + 1]
-            if char in (b"d", b"l"):
-                depth += 1
-                i += 1
-            elif char == b"e":
-                depth -= 1
-                i += 1
-                if depth == 0:
-                    break
-            elif char.isdigit():
-                colon = file_bytes.find(b":", i)
-                if colon == -1:
-                    break
-                length = int(file_bytes[i:colon])
-                i = colon + 1 + length
-            elif char == b"i":
-                e_pos = file_bytes.find(b"e", i)
-                if e_pos == -1:
-                    break
-                i = e_pos + 1
-            else:
-                i += 1
-
-        info_bytes = file_bytes[dict_start:i]
+        info_bytes = file_bytes[info_span[0]:info_span[1]]
         infohash = hashlib.sha1(info_bytes).hexdigest()
 
-        name_match = re.search(rb"4:name(\d+):", info_bytes)
-        name_str = ""
-        if name_match:
-            try:
-                nl = int(name_match.group(1))
-                ns = name_match.end()
-                name_str = info_bytes[ns:ns + nl].decode("utf-8", errors="ignore")
-            except Exception:
-                pass
+        info_dict = decoded.get(b"info", {})
+        raw_name = info_dict.get(b"name.utf-8") or info_dict.get(b"name")
+        name_str = raw_name.decode("utf-8", errors="ignore") if isinstance(raw_name, bytes) else ""
 
         trackers = []
-        for m in re.finditer(rb'(https?://[^\s\"\'<>]+|udp://[^\s\"\'<>]+)', file_bytes):
-            start = m.start(1)
-            if start > 0 and file_bytes[start - 1:start] == b':':
-                digits_end = start - 1
-                digits_start = digits_end
-                while digits_start > 0 and file_bytes[digits_start - 1:digits_start].isdigit():
-                    digits_start -= 1
-                if digits_start < digits_end:
-                    try:
-                        length = int(file_bytes[digits_start:digits_end])
-                        tr_url = file_bytes[start:start + length].decode("utf-8", errors="ignore")
-                        if tr_url.startswith(("http://", "https://", "udp://")) and tr_url not in trackers:
-                            trackers.append(tr_url)
-                    except Exception:
-                        pass
+
+        def _add_tracker(raw_url):
+            if isinstance(raw_url, bytes):
+                tr_url = raw_url.decode("utf-8", errors="ignore").strip()
+                if tr_url.startswith(("http://", "https://", "udp://")) and tr_url not in trackers:
+                    trackers.append(tr_url)
+
+        _add_tracker(decoded.get(b"announce"))
+        announce_list = decoded.get(b"announce-list")
+        if isinstance(announce_list, list):
+            for tier in announce_list:
+                if isinstance(tier, list):
+                    for item in tier:
+                        _add_tracker(item)
+                else:
+                    _add_tracker(tier)
 
         magnet = f"magnet:?xt=urn:btih:{infohash}"
         if name_str:
@@ -224,43 +292,313 @@ def parse_torrents(html_content):
     return torrents
 
 
+def extract_quality_tags(title: str, mediainfo_text: str = "") -> list[str]:
+    """Extracts clean, high-level resolution, source, and codec badges from release title and mediainfo."""
+    tags = []
+    t_lower = (title or "").lower()
+    m_lower = (mediainfo_text or "").lower()
+
+    # Resolution
+    if re.search(r"\b(2160p|4k|uhd)\b", t_lower) or re.search(r"\b(3840\s*x\s*2160|width\s*:\s*3\s*840)\b", m_lower):
+        tags.append("4K UHD")
+    elif re.search(r"\b(1080p|1080i|fhd)\b", t_lower) or re.search(r"\b(1920\s*x\s*1080|width\s*:\s*1\s*920)\b", m_lower):
+        tags.append("1080p")
+    elif re.search(r"\b(720p|hd)\b", t_lower) or re.search(r"\b(1280\s*x\s*720|width\s*:\s*1\s*280)\b", m_lower):
+        tags.append("720p")
+    elif re.search(r"\b(576p|480p|sd)\b", t_lower):
+        tags.append("SD")
+
+    # Source
+    if re.search(r"\bremux\b", t_lower):
+        tags.append("Remux")
+    elif re.search(r"\b(bluray|bdrip|brrip)\b", t_lower):
+        tags.append("BluRay")
+    elif re.search(r"\b(web-?dl|webrip)\b", t_lower):
+        tags.append("WEB")
+    elif re.search(r"\b(dvdrip|dvd)\b", t_lower):
+        tags.append("DVD")
+    elif re.search(r"\bhdtv\b", t_lower):
+        tags.append("HDTV")
+
+    # Video Codec
+    if re.search(r"\b(x265|hevc|h\.?265)\b", t_lower) or "format : hevc" in m_lower or "writing library : x265" in m_lower:
+        tags.append("HEVC/x265")
+    elif re.search(r"\b(x264|avc|h\.?264)\b", t_lower) or "format : avc" in m_lower or "writing library : x264" in m_lower:
+        tags.append("AVC/x264")
+    elif re.search(r"\bav1\b", t_lower) or "format : av1" in m_lower:
+        tags.append("AV1")
+
+    # Dynamic Range
+    if re.search(r"\b(hdr10\+|hdr10|hdr)\b", t_lower) or "hdr" in m_lower:
+        tags.append("HDR")
+    if re.search(r"\b(dolby[\s.]*vision|dovi|\bdv\b)", t_lower) or "dolby vision" in m_lower:
+        tags.append("DV")
+
+    # Audio Channels / Specs (if prominent)
+    if re.search(r"\b(atmos|dolby atmos)\b", t_lower) or "atmos" in m_lower:
+        tags.append("Atmos")
+    elif re.search(r"\b(7\.1|8\s*channels?)\b", t_lower) or "8 channels" in m_lower:
+        tags.append("7.1")
+    elif re.search(r"\b(5\.1|6\s*channels?)\b", t_lower) or "6 channels" in m_lower:
+        tags.append("5.1")
+
+    # Deduplicate while maintaining order
+    seen = set()
+    deduped = []
+    for tag in tags:
+        if tag not in seen:
+            seen.add(tag)
+            deduped.append(tag)
+    return deduped
+
+
+def is_technical_encoding_line(line: str) -> bool:
+    """Returns True if a line consists of technical MediaInfo, stream, or encoding parameters."""
+    l = line.strip()
+    if not l:
+        return True
+
+    # Tracker noise / boilerplate
+    if any(k in l for k in [
+        "Rolovatelne Media Info", "Podakuj za torrent", "Pridaj vlastnu verziu",
+        "Text bude automaticky centrovany", "Darovat seedbodov", "http://", "https://"
+    ]):
+        return True
+
+    # MediaInfo Section Headers
+    if re.match(r"^(?:General|Hlavné|Hlavní|Video|Obraz|Audio|Zvuk|Text|Titulky|Menu|Chapters|Kapitoly)(?:\s*#\d+)?\s*$", l, re.I):
+        return True
+
+    # Standard MediaInfo Key: Value patterns
+    if re.match(
+        r"^(?:Format|Formát|Format/Info|Format_Profile|Format_Settings|Codec|Codec\s*ID|Kodek|"
+        r"Bit\s*rate|Bitrate|Dátový\s*tok|Datovy\s*tok|Celkový\s*dátový\s*tok|Overall\s*bit\s*rate|"
+        r"Width|Height|Resolution|Rozlíšenie|Rozlišení|Display\s*aspect\s*ratio|Pomer\s*strán|"
+        r"Frame\s*rate|Snímková\s*frekvencia|Framerate|FPS|Scan\s*type|"
+        r"Color\s*space|Chroma\s*subsampling|Bit\s*depth|"
+        r"Stream\s*size|Veľkosť\s*streamu|Velikost\s*streamu|"
+        r"Writing\s*(?:library|application)|Použitá\s*knižnica|Knihovna|"
+        r"Encoding\s*settings|Nastavenia\s*kódovania|Nastavení\s*enkódování|"
+        r"Channel\(s\)|Kanál\(y\)|Sampling\s*rate|Vzorkovacia\s*frekvencia|Compression\s*mode|"
+        r"Unique\s*ID|Complete\s*name|File\s*size|Duration|Trvanie|Délka)[\s:]+",
+        l,
+        re.I,
+    ):
+        return True
+
+    # Encoder settings dumps (e.g. cabac=1 / ref=4 / deblock=1:0:0...)
+    if re.search(r"\b(?:cabac=\d|ref=\d|deblock=|analyse=|me_hex|subme=\d|rc=2pass|aq=\d)\b", l, re.I):
+        return True
+
+    # Inline stream parameter dumps (e.g. "1920x1080 23.976fps x264 5000kbps AC3 5.1")
+    if re.search(r"\b(?:\d{3,4}x\d{3,4}|\d{3,4}p)\b", l, re.I) and any(
+        k in l.lower() for k in ["fps", "kbps", "mbps", "x264", "x265", "hevc", "avc", "ac3", "dts", "aac"]
+    ):
+        return True
+
+    # Metadata headers that aren't synopsis
+    if re.match(r"^(?:Jazyk|Language|Audio|Video|Titulky|Subtitles|Veľkosť|Velkost|Size|Hash|Info_Hash|Seed|Leech)[\s:]", l, re.I):
+        return True
+
+    return False
+
+
 def find_main_content_td(soup):
-    candidates = soup.find_all("td", class_="lista")
-    for td in candidates:
+    # 1. Search for table row with Popis / Description / Obsah
+    for tr in soup.find_all("tr"):
+        tds = tr.find_all("td")
+        if len(tds) >= 2:
+            heading = tds[0].get_text(strip=True).lower()
+            if "popis" in heading or "description" in heading or "obsah" in heading:
+                return tds[1]
+
+    # 2. Fallback to candidate td elements
+    for td in soup.find_all("td", class_="lista"):
         text = td.get_text(separator=" ", strip=True)
-        if len(text) > 150 and any(k in text for k in ["Obsah", "Popis", "Media info", "Mediainfo", "CSFD", "csfd", "databazeknih", "Format", "Formát", "Video"]):
-            return td, text
-    return None, ""
+        if len(text) > 100 and any(k in text for k in ["Obsah", "Popis", "CSFD", "csfd", "databazeknih", "Dej", "Film"]):
+            return td
+    return None
 
 
-def extract_clean_synopsis(soup):
-    td, text = find_main_content_td(soup)
-    if not td or not text:
-        return ""
+def extract_tracklist(soup, desc_text="", files=None):
+    """Extracts a list of track names from description, headings, or audio files."""
+    if files is None:
+        files = []
+    tracks = []
 
-    # 1. Search for Obsah: / Popis: / Dej: / Summary: / Plot: / Popis filmu:
-    m = re.search(
-        r"(?:Obsah|Popis|Dej|Summary|Plot|Popis\s+filmu)[\s:]+(.*?)(?=\s*(?:-|–|\n|\r)*\s*(?:Media\s*info|Mediainfo|Formát|Format|Video|Audio|CSFD|ČSFD|https?://|Darovat|Pridaj|$))",
-        text,
-        re.I | re.DOTALL,
-    )
-    if m:
-        syn = m.group(1).strip()
-        syn = re.sub(r"[\s\-–:=]+$", "", syn)
-        syn = re.sub(r"\s+", " ", syn).strip()
-        syn = re.sub(r"\(\s*\(\s*([^()]+?)\s*-\s*\)\s*\)", r"(\1)", syn)
-        if len(syn) > 15 and not any(k in syn for k in ["Matroska", "Codec ID", "Video ID", "Overall bit rate"]):
+    # 1. Search in desc_text for tracklist section
+    if desc_text:
+        m = re.search(
+            r"(?:Seznam\s*skladeb|Tracklist|Tracks|Skladby|Obsah\s*cd)[\s:]*\n*(.*?)(?=(?:\n\s*){3,}|Darovat|\Z)",
+            desc_text,
+            re.I | re.DOTALL,
+        )
+        if m:
+            for line in m.group(1).split("\n"):
+                line = line.strip()
+                if line and re.match(r"^\d{1,2}[\.\-\s]", line):
+                    tracks.append(line)
+
+    # 2. Search in soup for Seznam skladeb / Tracklist
+    if not tracks and soup:
+        target = soup.find(string=lambda t: t and re.search(r"(?:Seznam\s*skladeb|Tracklist)", t, re.I))
+        if target:
+            parent = target.find_parent(["td", "div", "font", "p"])
+            if parent:
+                for line in parent.get_text(separator="\n").split("\n"):
+                    line = line.strip()
+                    if line and re.match(r"^\d{1,2}[\.\-\s]", line):
+                        tracks.append(line)
+
+    # 3. Fallback: Parse numbered audio files from torrent filelist
+    if not tracks and files:
+        for f in files:
+            base = f.split("/")[-1].split("\\")[-1].strip()
+            if re.search(r"\.(mp3|flac|m4a|wav|aac|ogg|alac)$", base, re.I):
+                base_clean = re.sub(r"\.(mp3|flac|m4a|wav|aac|ogg|alac)$", "", base, flags=re.I)
+                if re.match(r"^\d{1,2}[\.\-\s]", base_clean):
+                    tracks.append(base_clean)
+
+    return tracks
+
+
+def extract_music_meta(desc_text=""):
+    """Extracts structured music metadata (genre, year, codec, bitrate, duration, country)."""
+    if not desc_text:
+        return {}
+    meta = {}
+    for line in desc_text.split("\n"):
+        m = re.match(
+            r"^(Žánr|Zanr|Rok(?:\s*vydání)?|Země\s*původu|Zeme\s*puvodu|Zvukový\s*kodek|Zvukovy\s*kodek|Datový\s*tok|Datovy\s*tok|Délka|Delka)[\s:]+(.+)$",
+            line.strip(),
+            re.I,
+        )
+        if m:
+            k = m.group(1).lower()
+            val = m.group(2).strip()
+            if "žánr" in k or "zanr" in k:
+                meta["genre"] = val
+            elif "rok" in k:
+                meta["year"] = val
+            elif "země" in k or "zeme" in k:
+                meta["country"] = val
+            elif "kodek" in k:
+                meta["codec"] = val
+            elif "tok" in k:
+                meta["bitrate"] = val
+            elif "délka" in k or "delka" in k:
+                meta["duration"] = val
+    return meta
+
+
+def extract_databazeknih_url(soup, raw_text=""):
+    """Extracts direct book link to databazeknih.cz from <a> tags or plain text."""
+    if soup:
+        # Specific book/author link
+        book_link = soup.find("a", href=re.compile(r"databazeknih\.cz/(?:knihy|dalsi-vydani|autori|povidky)/", re.I))
+        if book_link and book_link.get("href"):
+            return book_link["href"].strip()
+
+        # Any databazeknih link
+        gen_link = soup.find("a", href=re.compile(r"databazeknih\.cz/", re.I))
+        if gen_link and gen_link.get("href"):
+            return gen_link["href"].strip()
+
+    if raw_text:
+        m = re.search(r"https?://(?:www\.)?databazeknih\.cz/(?:knihy|dalsi-vydani|autori|povidky)/[a-zA-Z0-9\-_./]+", raw_text)
+        if m:
+            return m.group(0).strip()
+        m_gen = re.search(r"https?://(?:www\.)?databazeknih\.cz/[a-zA-Z0-9\-_./]+", raw_text)
+        if m_gen:
+            return m_gen.group(0).strip()
+
+    return ""
+
+
+def extract_clean_synopsis(soup, meta_desc="", title=""):
+    """Multi-variant extractor for genuine narrative synopsis while filtering noise and title echoes."""
+    clean_title = (title or "").strip().lower()
+
+    def sanitize_synopsis_text(candidate):
+        if not candidate:
+            return ""
+        clean_lines = []
+        for raw_line in candidate.split("\n"):
+            line = raw_line.strip()
+            if not line:
+                if clean_lines and clean_lines[-1] != "":
+                    clean_lines.append("")
+                continue
+
+            # Strip tracker noise / boilerplate
+            if any(skip in line for skip in [
+                "Rolovatelne Media Info", "Podakuj za torrent", "Pridaj vlastnu verziu",
+                "Text bude automaticky centrovany", "Darovat seedbodov", "Darovat",
+                "Upozornenie:Ziadny zo zobrazených súborov", "Upozornenie: Ziadny zo zobrazených",
+                "Autori stránok nenesú", "Vlozit svuj komentar", "Zadne komenare",
+            ]):
+                continue
+
+            # Skip lines that are just echo of title
+            line_clean = re.sub(r"^(?:Názov|Nazov|Title|Jméno|Meno)[\s:]+", "", line, flags=re.I).strip()
+            if not line_clean or line_clean.lower() == clean_title:
+                continue
+
+            # Skip music tracklists and music metadata lines from general synopsis
+            if re.match(r"^(?:Seznam\s*skladeb|Tracklist|Skladby|Obsah\s*cd)[\s:]*", line, re.I):
+                break
+            if re.match(r"^\d{1,2}[\.\-\s]+[A-Za-z0-9]", line):
+                continue
+            if re.match(r"^(?:Žánr|Zanr|Rok(?:\s*vydání)?|Země\s*původu|Zvukový\s*kodek|Datový\s*tok|Délka)[\s:]+", line, re.I):
+                continue
+
+            if is_technical_encoding_line(line):
+                continue
+
+            clean_lines.append(line_clean)
+
+        res = "\n".join(clean_lines).strip()
+        res = re.sub(r"\n{3,}", "\n\n", res)
+        return res
+
+    # Strategy 1: Clean text from meta itemprop="description"
+    if meta_desc:
+        syn = sanitize_synopsis_text(meta_desc)
+        if len(syn) >= 20 and not syn.lower().startswith("názov:") and not syn.lower().startswith("nazov:"):
             return syn
 
-    # 2. Try tag-level extraction for clean paragraphs
-    clean_paras = []
-    for p in td.find_all(["p", "div", "span", "i", "font"]):
-        pt = p.get_text(strip=True)
-        if len(pt) > 40 and not any(k in pt for k in ["http://", "https://", "Mediainfo", "Format", "Formát", "BitRate", "Bit rate", "Codec", "Matroska", "Overall bit rate", "Stream size", "Frame rate", "Resolution", "Rolovatelne", "Podakuj za torrent", "Text bude automaticky centrovany", "Pridaj vlastnu verziu", "Darovat seedbodov"]):
-            if pt not in clean_paras and not re.search(r"^(Jazyk|Titulky|Size|Velikost|Velkost|Kategória|Zaner|Hash|Seed|Leech)[\s:]", pt, re.I):
-                clean_paras.append(pt)
-    if clean_paras:
-        return "\n\n".join(clean_paras)
+    # Strategy 2: Explicit heading in main content area
+    td = find_main_content_td(soup)
+    if td:
+        for br in td.find_all(["br", "hr"]):
+            br.replace_with("\n")
+        for block in td.find_all(["p", "div"]):
+            block.append("\n")
+
+        raw_text = td.get_text()
+        obsah_match = re.search(
+            r"(?:Obsah|Popis|Dej|Summary|Plot|Popis\s+filmu|Anotace|O\s+knize)[\s:]+(.*?)(?=(?:\n\s*){2,}(?:Media\s*info|Video|Audio|CSFD|ČSFD|https?://|Darovat|$))",
+            raw_text,
+            re.I | re.DOTALL,
+        )
+        if obsah_match:
+            syn = sanitize_synopsis_text(obsah_match.group(1))
+            if len(syn) >= 20 and not syn.lower().startswith("názov:") and not syn.lower().startswith("nazov:"):
+                return syn
+
+        # Strategy 3: Paragraph collection from td
+        clean_paras = []
+        for p in td.find_all(["p", "div", "span", "font"]):
+            pt = p.get_text(separator=" ", strip=True)
+            if len(pt) > 40 and not is_technical_encoding_line(pt):
+                if pt not in clean_paras and not re.search(r"^(?:Jazyk|Titulky|Size|Velikost|Velkost|Kategória|Zaner|Hash|Seed|Leech|Názov|Nazov)[\s:]", pt, re.I):
+                    sanitized_p = sanitize_synopsis_text(pt)
+                    if len(sanitized_p) > 30 and sanitized_p not in clean_paras:
+                        clean_paras.append(sanitized_p)
+        if clean_paras:
+            combined = "\n\n".join(clean_paras)
+            if len(combined) >= 20:
+                return combined
 
     return ""
 
@@ -276,9 +614,12 @@ def extract_related_torrents(soup, current_tid=""):
             rel_title = a.text.strip()
             if rel_id not in seen_ids and rel_title and len(rel_title) > 3:
                 seen_ids.add(rel_id)
+                formatted_title = rel_title.replace(" ", "_") + ".torrent"
+                dl_link = f"/proxy_download?id={rel_id}&f={urllib.parse.quote(formatted_title)}"
                 related.append({
                     "id": rel_id,
                     "title": rel_title,
+                    "download_link": dl_link,
                     "sktorrent_url": f"https://sktorrent.eu/torrent/details.php?id={rel_id}",
                 })
     return related
@@ -298,6 +639,7 @@ def parse_skt_details_html(html_text, category="", tid=""):
         "imdb_url": "",
         "content_type": "movie",
         "languages": [],
+        "quality_tags": [],
         "season_episode": "",
         "synopsis": "",
         "mediainfo_text": "",
@@ -308,34 +650,36 @@ def parse_skt_details_html(html_text, category="", tid=""):
         "added_date": "",
         "files": [],
         "related_torrents": [],
+        "tracklist": [],
+        "music_meta": {},
     }
 
     meta_name = soup.find("meta", {"itemprop": "name"})
     if meta_name and meta_name.get("content"):
         details["title"] = meta_name["content"].strip()
 
+    meta_desc_tag = soup.find("meta", {"itemprop": "description"})
+    meta_desc = meta_desc_tag.get("content", "").strip() if meta_desc_tag else ""
+
     # External Links
     csfd_link = soup.find("a", href=re.compile(r"csfd\.cz/film/"))
     if csfd_link and csfd_link.get("href"):
-        details["csfd_url"] = csfd_link["href"]
-        m = re.search(r"csfd\.cz/film/(\d+)", csfd_link["href"])
-        if m:
-            details["csfd_id"] = m.group(1)
+        safe_csfd = sanitize_http_url(csfd_link["href"])
+        if safe_csfd:
+            details["csfd_url"] = safe_csfd
+            m = re.search(r"csfd\.cz/film/(\d+)", safe_csfd)
+            if m:
+                details["csfd_id"] = m.group(1)
 
-    book_link = soup.find("a", href=re.compile(r"(databazeknih\.cz|cbdb\.cz|goodreads\.com)"))
-    if book_link and book_link.get("href"):
-        details["databazeknih_url"] = book_link["href"]
+    details["databazeknih_url"] = sanitize_http_url(extract_databazeknih_url(soup, html_text))
 
     imdb_link = soup.find("a", href=re.compile(r"imdb\.com/title/"))
     if imdb_link and imdb_link.get("href"):
-        details["imdb_url"] = imdb_link["href"]
+        details["imdb_url"] = sanitize_http_url(imdb_link["href"])
 
     poster_img = soup.find("img", src=re.compile(r"cdn\.sktorrent\.eu/obrazky/"))
     if poster_img and poster_img.get("src"):
-        src = poster_img["src"]
-        if src.startswith("//"):
-            src = "https:" + src
-        details["poster_url"] = src
+        details["poster_url"] = sanitize_http_url(poster_img["src"])
 
     mediainfo_div = (
         soup.find("div", {"id": re.compile(r"filesMediainfo", re.I)}) or
@@ -349,9 +693,9 @@ def parse_skt_details_html(html_text, category="", tid=""):
         ]
         details["mediainfo_text"] = "\n".join(clean_mi_lines).strip()
 
-    iframe = soup.find("iframe", src=re.compile(r"youtube\.com"))
+    iframe = soup.find("iframe", src=re.compile(r"youtube(?:-nocookie)?\.com"))
     if iframe and iframe.get("src"):
-        details["trailer_url"] = iframe["src"]
+        details["trailer_url"] = sanitize_youtube_embed_url(iframe["src"])
 
     for tr in soup.find_all("tr"):
         tds = tr.find_all("td")
@@ -370,11 +714,29 @@ def parse_skt_details_html(html_text, category="", tid=""):
             elif "súbory" in k or "subory" in k or "files" in k:
                 files_text = tds[1].get_text(separator="\n", strip=True)
                 details["files"] = [f.strip() for f in files_text.split("\n") if f.strip()]
+            elif "kategór" in k or "kategor" in k or "category" in k:
+                if not category:
+                    category = v
 
-    details["synopsis"] = extract_clean_synopsis(soup)
+    if not category:
+        cat_tag = soup.find("a", href=re.compile(r"category=\d+"))
+        if cat_tag:
+            category = cat_tag.get_text(strip=True)
+
+    details["category"] = category
+    details["tracklist"] = extract_tracklist(soup, meta_desc, details["files"])
+    details["music_meta"] = extract_music_meta(meta_desc)
+    details["synopsis"] = extract_clean_synopsis(soup, meta_desc, details["title"])
+    details["quality_tags"] = extract_quality_tags(details["title"], details["mediainfo_text"])
+
+    if details["music_meta"]:
+        mm = details["music_meta"]
+        for key in ["bitrate", "codec", "year"]:
+            if mm.get(key) and mm[key] not in details["quality_tags"]:
+                details["quality_tags"].append(mm[key])
 
     details["csfd_score"] = extract_csfd_score(details["title"], details["synopsis"], html_text)
-    details["content_type"] = detect_content_type(category, details["title"])
+    details["content_type"] = detect_content_type(category, details["title"], details["mediainfo_text"])
     details["languages"] = parse_languages(f"{details['title']} {details['synopsis']}")
 
     se_match = re.search(r"\b(S\d{1,2}E\d{1,2}|\d{1,2}x\d{1,2})\b", details["title"], re.I)

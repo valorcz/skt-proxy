@@ -25,3 +25,8 @@ static/covers/
 .DS_Store
 .idea/
 .vscode/
+
+# Frontend (Node & Svelte)
+frontend/node_modules/
+frontend/dist/
+src/skt_proxy/static/dist/

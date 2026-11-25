@@ -1,3 +1,4 @@
+import os
 import json
 import sqlite3
 import pytest
@@ -121,7 +122,8 @@ def test_api_mark_read_endpoint(client, tmp_path):
     with sqlite3.connect(db_file) as conn:
         conn.execute("INSERT INTO torrents (id, title, is_new) VALUES (?, ?, ?)", ("999", "New Movie", True))
     
-    resp = client.post("/api/mark_read", json={"id": "999"})
+    with patch.object(app, "ensure_login", return_value=True):
+        resp = client.post("/api/mark_read", json={"id": "999"})
     assert resp.status_code == 200
     assert resp.get_json()["success"] is True
 
@@ -144,3 +146,319 @@ def test_clear_expired_new_flags(tmp_path):
         with sqlite3.connect(db_file) as conn:
             row = conn.execute("SELECT is_new FROM torrents WHERE id='old_id'").fetchone()
             assert row[0] == 0
+
+
+def test_api_mark_all_read_endpoint(client):
+    db_file = app.DB_PATH
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("INSERT INTO torrents (id, title, is_new) VALUES (?, ?, ?)", ("1001", "Movie 1", True))
+        conn.execute("INSERT INTO torrents (id, title, is_new) VALUES (?, ?, ?)", ("1002", "Movie 2", True))
+
+    with patch.object(app, "ensure_login", return_value=True):
+        resp = client.post("/api/mark_all_read")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["success"] is True
+    assert data["count"] == 2
+
+    with sqlite3.connect(db_file) as conn:
+        rows = conn.execute("SELECT is_new FROM torrents WHERE is_new = 1").fetchall()
+        assert len(rows) == 0
+
+
+def test_api_sync_status_endpoint(client):
+    with patch.object(app, "ensure_login", return_value=True):
+        resp = client.get("/api/sync_status?category=0")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert "last_synced" in data
+    assert "new_items" in data
+    assert "unread_count" in data
+
+
+def test_api_torrents_with_new_only(client):
+    db_file = app.DB_PATH
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("INSERT INTO torrents (id, title, is_new, added_date) VALUES (?, ?, ?, ?)", ("2001", "Old Film", False, "2026-09-01"))
+        conn.execute("INSERT INTO torrents (id, title, is_new, added_date) VALUES (?, ?, ?, ?)", ("2002", "Fresh Film", True, "2026-09-02"))
+
+    with patch.object(app, "ensure_login", return_value=True), \
+         patch("skt_proxy.services.scraper.sync_tracker_feed", return_value=0):
+        resp_all = client.get("/api/torrents?new_only=false")
+        assert resp_all.status_code == 200
+        all_data = resp_all.get_json()
+        assert len(all_data["torrents"]) == 2
+        assert all_data["unread_count"] == 1
+
+        resp_new = client.get("/api/torrents?new_only=true")
+        assert resp_new.status_code == 200
+        new_data = resp_new.get_json()
+        assert len(new_data["torrents"]) == 1
+        assert new_data["torrents"][0]["id"] == "2002"
+
+
+def test_api_config_endpoint(client):
+    resp = client.get("/api/config")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert "app_version" in data
+    assert "skt_username" in data
+    assert "can_use_nas" in data
+    assert "current_user" in data
+
+
+def test_index_endpoint_serves_spa(client):
+    with patch.object(app, "ensure_login", return_value=True):
+        resp = client.get("/")
+        assert resp.status_code == 200
+        # Check that it serves either the built SPA HTML or the template fallback
+        assert b"SkT Proxy" in resp.data
+
+
+def test_static_dist_assets_served(client):
+    # Verify that Flask serves the built JS/CSS bundle
+    dist_dir = os.path.join(app.app.root_path, "static", "dist", "assets")
+    if os.path.exists(dist_dir):
+        assets = os.listdir(dist_dir)
+        for asset in assets:
+            resp = client.get(f"/static/dist/assets/{asset}")
+            assert resp.status_code == 200
+
+
+def test_api_cover_cached_hit(client, tmp_path):
+    covers_dir = app.COVERS_DIR
+    os.makedirs(covers_dir, exist_ok=True)
+    cover_file = os.path.join(covers_dir, "5555.jpg")
+    with open(cover_file, "wb") as f:
+        f.write(b"\xff\xd8\xff\xe0testimage")
+
+    resp = client.get("/api/cover/5555")
+    assert resp.status_code == 200
+    assert resp.data == b"\xff\xd8\xff\xe0testimage"
+    assert "immutable" in resp.headers.get("Cache-Control", "")
+
+
+def test_api_cover_on_demand_fetch(client):
+    db_file = app.DB_PATH
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO torrents (id, title, image_url) VALUES (?, ?, ?)",
+            ("7777", "Test Movie", "https://sktorrent.eu/torrent/images/cover7777.jpg")
+        )
+
+    with patch.object(app.skt_session, "get") as mock_get:
+        mock_get.return_value = MagicMock(status_code=200, content=b"downloaded_cover_bytes")
+        resp = client.get("/api/cover/7777")
+        assert resp.status_code == 200
+        assert resp.data == b"downloaded_cover_bytes"
+
+        # Verify cached to disk
+        cover_path = os.path.join(app.COVERS_DIR, "7777.jpg")
+        assert os.path.exists(cover_path)
+
+        # Verify DB updated
+        with sqlite3.connect(db_file) as conn:
+            local_img = conn.execute("SELECT local_image FROM torrents WHERE id='7777'").fetchone()[0]
+            assert local_img == "/static/covers/7777.jpg"
+
+
+def test_api_cover_not_found(client):
+    with patch.object(app.skt_session, "get") as mock_get:
+        mock_get.return_value = MagicMock(status_code=404, text="")
+        resp = client.get("/api/cover/999999")
+        assert resp.status_code == 404
+
+
+def test_api_torrent_details_proxies_poster(client):
+    mock_details_html = """
+    <html>
+    <body>
+        <table class="main">
+            <tr><td class="heading">Názov</td><td class="rowhead">Avatar 2009</td></tr>
+            <tr><td class="heading">Popis</td><td class="rowhead">
+                <img src="https://cdn.sktorrent.eu/obrazky/123456.jpg" />
+                <p>Pandora story.</p>
+                <a href="details.php?id=abcdef1234567890abcdef1234567890abcdef12">Avatar 1080p</a>
+            </td></tr>
+        </table>
+    </body>
+    </html>
+    """
+    with patch.object(app, "ensure_login", return_value=True), \
+         patch.object(app.skt_session, "get") as mock_get:
+        mock_get.return_value = MagicMock(status_code=200, text=mock_details_html)
+        resp = client.get("/api/torrent_details?id=123456")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["poster_url"] == "/api/cover/123456"
+        assert len(data["related_torrents"]) == 1
+        rel = data["related_torrents"][0]
+        assert "download_link" in rel
+        assert "/proxy_download?id=" in rel["download_link"]
+        assert "sktorrent_url" in rel
+
+
+def test_api_torrent_details_detects_speech_and_category(client):
+    db_file = app.DB_PATH
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO torrents (id, title, category) VALUES (?, ?, ?)",
+            ("8888", "Karel Capek - RUR", "Hovorené slovo")
+        )
+
+    mock_speech_html = """
+    <html>
+    <body>
+        <table class="main">
+            <tr><td class="heading">Názov</td><td class="rowhead">Karel Capek - RUR (rozhlasova hra)</td></tr>
+            <tr><td class="heading">Popis</td><td class="rowhead"><p>Vyborna rozhlasova hra.</p></td></tr>
+        </table>
+    </body>
+    </html>
+    """
+    with patch.object(app, "ensure_login", return_value=True), \
+         patch.object(app.skt_session, "get") as mock_get:
+        mock_get.return_value = MagicMock(status_code=200, text=mock_speech_html)
+        resp = client.get("/api/torrent_details?id=8888")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["content_type"] == "book"
+        assert data["category"] == "Hovorené slovo"
+
+
+def test_api_torrent_details_persists_databazeknih_url(client):
+    db_file = app.DB_PATH
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO torrents (id, title, category) VALUES (?, ?, ?)",
+            ("9991", "Stoparuv pruvodce po Galaxii", "E-knihy")
+        )
+
+    mock_book_html = """
+    <html>
+    <body>
+        <meta itemprop="name" content="Stopařův průvodce po Galaxii">
+        <meta itemprop="description" content="Kultovní sci-fi komedie od Douglase Adamse.">
+        <table class="main">
+            <tr><td class="heading">Názov</td><td class="rowhead">Douglas Adams - Stopařův průvodce</td></tr>
+            <tr><td class="heading">Popis</td><td class="rowhead">
+                <a href="https://www.databazeknih.cz/knihy/stoparuv-pruvodce-po-galaxii-217">Databáze knih</a>
+                <p>Nezapomeňte si ručník!</p>
+            </td></tr>
+        </table>
+    </body>
+    </html>
+    """
+    with patch.object(app, "ensure_login", return_value=True), \
+         patch.object(app.skt_session, "get") as mock_get:
+        mock_get.return_value = MagicMock(status_code=200, text=mock_book_html)
+        resp = client.get("/api/torrent_details?id=9991")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["databazeknih_url"] == "https://www.databazeknih.cz/knihy/stoparuv-pruvodce-po-galaxii-217"
+
+        # Verify persisted into SQLite
+        with sqlite3.connect(db_file) as conn:
+            row = conn.execute("SELECT databazeknih_url FROM torrents WHERE id='9991'").fetchone()
+            assert row[0] == "https://www.databazeknih.cz/knihy/stoparuv-pruvodce-po-galaxii-217"
+
+        # Verify returned in /api/torrents
+        torrents_resp = client.get("/api/torrents")
+        assert torrents_resp.status_code == 200
+        t_list = torrents_resp.get_json()["torrents"]
+        matching = [t for t in t_list if t["id"] == "9991"]
+        assert len(matching) == 1
+        assert matching[0]["databazeknih_url"] == "https://www.databazeknih.cz/knihy/stoparuv-pruvodce-po-galaxii-217"
+
+
+def test_invalid_torrent_id_rejected(client):
+    with patch.object(app, "ensure_login", return_value=True), \
+         patch.object(app, "can_use_nas", return_value=True):
+        assert client.get("/api/cover/..secret").status_code == 400
+        assert client.get("/api/torrent_details?id=bad!id").status_code == 400
+        assert client.get("/proxy_download?id=bad!id&f=file.torrent").status_code == 400
+        assert client.post("/api/send_to_nas", json={"id": "bad!id", "f": "file.torrent"}).status_code == 400
+
+
+def test_global_error_handler_hides_internal_details(client):
+    with patch.object(app, "ensure_login", side_effect=RuntimeError("secret db path /var/data")):
+        resp = client.get("/api/sync_status")
+        assert resp.status_code == 500
+        body = resp.get_json()
+        assert body["error"] == "Internal server error"
+        assert "secret db path" not in body["error"]
+
+
+def test_api_torrents_search_genre_and_has_more(client):
+    db_file = app.DB_PATH
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO torrents (id, title, category_id, genres, is_new, added_date, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("t1", "Dune Part One", "1", json.dumps(["Sci-Fi", "Drama"]), False, "2026-11-25", 3),
+        )
+        conn.execute(
+            "INSERT INTO torrents (id, title, category_id, genres, is_new, added_date, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("t2", "Dune Part Two 100%_test", "1", json.dumps(["Sci-Fi"]), False, "2026-11-25", 2),
+        )
+        conn.execute(
+            "INSERT INTO torrents (id, title, category_id, genres, is_new, added_date, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("t3", "Comedy Special", "1", json.dumps(["Comedy"]), False, "2026-11-25", 1),
+        )
+
+    with patch.object(app, "ensure_login", return_value=True), \
+         patch("skt_proxy.services.scraper.sync_tracker_feed", return_value=0), \
+         patch.object(app.config, "PAGE_SIZE", 1):
+        # Exact page_size + 1 lookahead ensures has_more=True when more items exist, False on last page
+        resp = client.get("/api/torrents?genres=Sci-Fi&page=0")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert [t["id"] for t in data["torrents"]] == ["t1"]
+        assert data["has_more"] is True
+
+        resp2 = client.get("/api/torrents?genres=Sci-Fi&page=1")
+        data2 = resp2.get_json()
+        assert [t["id"] for t in data2["torrents"]] == ["t2"]
+        assert data2["has_more"] is False
+
+        # Escaped LIKE wildcards in ?q= search
+        resp_q = client.get("/api/torrents?q=100%25_test")
+        assert resp_q.status_code == 200
+        assert [t["id"] for t in resp_q.get_json()["torrents"]] == ["t2"]
+
+
+def test_create_app_factory_isolated_config(tmp_path):
+    db_file = str(tmp_path / "factory.db")
+    covers_dir = str(tmp_path / "covers")
+    custom_app = app.create_app({"TESTING": True, "DB_PATH": db_file, "COVERS_DIR": covers_dir})
+    with custom_app.test_client() as custom_client:
+        resp = custom_client.get("/api/categories")
+        assert resp.status_code == 200
+        assert resp.get_json() == []
+    assert os.path.exists(db_file)
+
+
+def test_create_app_starts_background_sync_when_enabled(tmp_path):
+    import threading
+    db_file = str(tmp_path / "bg_app.db")
+    covers_dir = str(tmp_path / "covers")
+    synced = threading.Event()
+
+    def fake_sync(category="0", db_path=None, max_pages=3):
+        synced.set()
+        return 0
+
+    with patch("skt_proxy.services.scraper.sync_tracker_feed", side_effect=fake_sync):
+        custom_app = app.create_app({
+            "TESTING": True,
+            "DB_PATH": db_file,
+            "COVERS_DIR": covers_dir,
+            "ENABLE_BACKGROUND_SYNC": True,
+            "BACKGROUND_SYNC_INTERVAL": 60,
+            "BACKGROUND_SYNC_INITIAL_DELAY": 0,
+        })
+        assert synced.wait(timeout=2.0) is True
+        stop_event = custom_app.extensions["background_sync_stop"]
+        thread = custom_app.extensions["background_sync_thread"]
+        stop_event.set()
+        thread.join(timeout=2.0)
+        assert not thread.is_alive()

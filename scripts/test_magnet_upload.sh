@@ -69,79 +69,12 @@ if [ -z "$TORRENT_FILE" ] || [ ! -f "$TORRENT_FILE" ]; then
 fi
 
 echo "[2/3] Extracting Infohash & ALL Tracker URLs..."
-MAGNET_URI=$(python3 -c "
-import sys, hashlib, re, urllib.parse
+MAGNET_URI=$(uv run python -c "
+import sys
+from skt_proxy.services.torrent_parser import torrent_bytes_to_magnet
 
 with open(sys.argv[1], 'rb') as f:
-    file_bytes = f.read()
-
-info_start = file_bytes.find(b'4:info')
-if info_start != -1:
-    dict_start = info_start + 6
-    if file_bytes[dict_start:dict_start + 1] == b'd':
-        depth = 0
-        i = dict_start
-        while i < len(file_bytes):
-            char = file_bytes[i:i + 1]
-            if char in (b'd', b'l'):
-                depth += 1
-                i += 1
-            elif char == b'e':
-                depth -= 1
-                i += 1
-                if depth == 0:
-                    break
-            elif char.isdigit():
-                colon = file_bytes.find(b':', i)
-                if colon == -1:
-                    break
-                length = int(file_bytes[i:colon])
-                i = colon + 1 + length
-            elif char == b'i':
-                e_pos = file_bytes.find(b'e', i)
-                if e_pos == -1:
-                    break
-                i = e_pos + 1
-            else:
-                i += 1
-
-        info_bytes = file_bytes[dict_start:i]
-        infohash = hashlib.sha1(info_bytes).hexdigest()
-
-        name_match = re.search(rb'4:name(\d+):', info_bytes)
-        name_str = ''
-        if name_match:
-            try:
-                nl = int(name_match.group(1))
-                ns = name_match.end()
-                name_str = info_bytes[ns:ns + nl].decode('utf-8', errors='ignore')
-            except Exception:
-                pass
-
-        trackers = []
-        for m in re.finditer(rb'(https?://[^\s\"\'<>]+|udp://[^\s\"\'<>]+)', file_bytes):
-            start = m.start(1)
-            if start > 0 and file_bytes[start - 1:start] == b':':
-                digits_end = start - 1
-                digits_start = digits_end
-                while digits_start > 0 and file_bytes[digits_start - 1:digits_start].isdigit():
-                    digits_start -= 1
-                if digits_start < digits_end:
-                    try:
-                        length = int(file_bytes[digits_start:digits_end])
-                        tr_url = file_bytes[start:start + length].decode('utf-8', errors='ignore')
-                        if tr_url.startswith(('http://', 'https://', 'udp://')) and tr_url not in trackers:
-                            trackers.append(tr_url)
-                    except Exception:
-                        pass
-
-        magnet = f'magnet:?xt=urn:btih:{infohash}'
-        if name_str:
-            magnet += f'&dn={urllib.parse.quote(name_str)}'
-        for tr in trackers:
-            magnet += f'&tr={urllib.parse.quote(tr, safe=\"\")}'
-
-        print(magnet)
+    print(torrent_bytes_to_magnet(f.read()) or '')
 " "$TORRENT_FILE")
 
 echo "[+] Converted Magnet URI with ALL Trackers: $MAGNET_URI"
