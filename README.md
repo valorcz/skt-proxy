@@ -12,7 +12,8 @@ A lightweight, modern web interface and caching proxy for **SkTorrent.eu**, desi
 - **📚 Book & Database Integrations**: Automatic detection of **ČSFD.cz**, **DatabázeKnih.cz**, and **IMDb** links with direct link action buttons.
 - **🚀 Synology NAS Integration**: Converts torrent files into multi-tracker Magnet URIs and pushes them directly to Synology DSM DownloadStation.
 - **📖 Clean Info Modal Reader**: Parses details pages into a clean plot summary (removing junk MediaInfo lines), scrollable code blocks, YouTube trailers, file lists, and related release versions.
-- **👁️ Automatic Read Tracking**: New torrent badges automatically fade out when scrolled into view (via `IntersectionObserver`) or after 48 hours.
+- **🔄 Always-Fresh Background Sync**: Periodically syncs new releases from SkTorrent in the background (`BACKGROUND_SYNC_INTERVAL`), even when no browser tabs are open.
+- **👁️ Read Tracking**: Mark individual torrents read on click/download, bulk-clear via **Mark all read** next to the **New Only** filter, or let unread flags expire automatically after 48 hours (`NEW_FLAG_EXPIRY_SECONDS`).
 
 ---
 
@@ -30,6 +31,14 @@ A lightweight, modern web interface and caching proxy for **SkTorrent.eu**, desi
 | `SYNOLOGY_DESTINATION` | Optional | `""` | Target download folder path on NAS (e.g. `downloads/movies`). |
 | `SYNOLOGY_VERIFY_SSL` | Optional | `false` | Enable/disable SSL certificate validation for NAS HTTPS calls (`true`/`false`). |
 | `NAS_ALLOWED_EMAILS` | Optional | `""` | Comma-separated list of authorized email addresses permitted to use NAS push actions. |
+| `CACHE_EXPIRY` | Optional | `300` | On-demand cache freshness window in seconds. |
+| `ENABLE_BACKGROUND_SYNC` | Optional | `true` | Enable/disable periodic background tracker sync when idle (`true`/`false`). |
+| `BACKGROUND_SYNC_INTERVAL` | Optional | `CACHE_EXPIRY` | Interval in seconds between periodic background sync runs. |
+| `PAGE_SIZE` | Optional | `40` | Number of torrents returned per API page. |
+| `NEW_FLAG_EXPIRY_SECONDS` | Optional | `172800` | Seconds before unread `New` flags expire automatically (48h). |
+| `DATA_DIR` | Optional | `data` | Directory for SQLite cache and cached cover images. |
+| `LOG_FORMAT` | Optional | `kv` | Log output format (`kv` or `json`). |
+| `APP_VERSION` | Optional | `v1.4.0-<sha>` | Override displayed build version badge. |
 
 ---
 
@@ -41,7 +50,7 @@ A lightweight, modern web interface and caching proxy for **SkTorrent.eu**, desi
 docker compose up -d --build
 ```
 
-Access the interface at `http://localhost:5001`.
+Access the interface at `http://localhost:5002`.
 
 ### Running Locally with `uv`
 

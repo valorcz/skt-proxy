@@ -66,3 +66,25 @@ def test_torrent_bytes_to_magnet_extraction():
     assert magnet.startswith("magnet:?xt=urn:btih:")
     assert "&dn=sample_movie" in magnet
     assert "&tr=https%3A%2F%2Fsktorrent.eu%2Fannounce.php" in magnet
+
+
+def test_push_to_synology_get_fallback_reports_get_error():
+    url = "https://sktorrent.eu/announce.php"
+    sample = f"d8:announce{len(url)}:{url}4:infod4:name12:sample_movie6:lengthi100e12:piece lengthi16384e6:pieces20:12345678901234567890ee".encode("utf-8")
+
+    with patch.object(app, "SYNOLOGY_URL", "http://nas:5000"), \
+         patch.object(app, "SYNOLOGY_USER", "user"), \
+         patch.object(app, "SYNOLOGY_PASSWORD", "pass"), \
+         patch("requests.Session") as mock_session_cls:
+
+        mock_session = MagicMock()
+        mock_session_cls.return_value = mock_session
+        mock_session.get.side_effect = [
+            MagicMock(json=lambda: {"success": True, "data": {"sid": "sid1"}}),
+            MagicMock(json=lambda: {"success": False, "error": {"code": 408}}),
+        ]
+        mock_session.post.return_value.json.return_value = {"success": False, "error": {"code": 101}}
+
+        success, msg = app.push_to_synology(sample, "test.torrent")
+        assert success is False
+        assert "Code: 408" in msg

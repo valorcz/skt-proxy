@@ -1,4 +1,6 @@
 <script>
+  import { ICONS } from '../icons.js';
+
   let {
     categories = [],
     selectedCategories = [],
@@ -8,11 +10,25 @@
     onToggleGenre = () => {},
     isNewOnly = false,
     unreadCount = 0,
-    onToggleNewOnly = () => {}
+    lastSynced = 0,
+    syncing = false,
+    onToggleNewOnly = () => {},
+    onMarkAllRead = () => {},
+    onSync = () => {}
   } = $props();
 
   let dropdownOpen = $state(false);
   let dropdownRef;
+
+  function formatLastSynced(ts) {
+    if (!ts) return 'Never';
+    const diffSec = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+    if (diffSec < 60) return 'just now';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    return `${diffHr}h ago`;
+  }
 
   function toggleDropdown(e) {
     e.stopPropagation();
@@ -33,10 +49,32 @@
     <span class="filter-label">Feed:</span>
     <button 
       class="pill {isNewOnly ? 'active' : ''}" 
+      aria-pressed={isNewOnly}
       onclick={onToggleNewOnly}
     >
       ⚡ New Only ({unreadCount})
     </button>
+    {#if unreadCount > 0}
+      <button 
+        class="pill mark-read-btn" 
+        onclick={onMarkAllRead} 
+        title="Mark all new items as read"
+      >
+        {@html ICONS.check}
+        Mark all read
+      </button>
+    {/if}
+    <button
+      class="pill sync-btn"
+      onclick={onSync}
+      disabled={syncing}
+      title="Sync latest torrents from tracker"
+    >
+      {syncing ? 'Syncing...' : '↻ Sync'}
+    </button>
+    {#if lastSynced > 0}
+      <span class="sync-meta">Synced {formatLastSynced(lastSynced)}</span>
+    {/if}
   </div>
 
   <div class="filter-row">
@@ -44,6 +82,7 @@
     {#each categories as cat (cat.id)}
       <button 
         class="pill {selectedCategories.includes(cat.id) ? 'active' : ''}"
+        aria-pressed={selectedCategories.includes(cat.id)}
         onclick={() => onToggleCategory(cat.id)}
       >
         {cat.name}
@@ -54,7 +93,7 @@
   <div class="filter-row">
     <span class="filter-label">Genres:</span>
     <div class="dropdown" bind:this={dropdownRef}>
-      <button class="pill" onclick={toggleDropdown}>
+      <button class="pill" aria-expanded={dropdownOpen} onclick={toggleDropdown}>
         {selectedGenres.length > 0 ? `Genres (${selectedGenres.length}) ▾` : 'Select Genres ▾'}
       </button>
       <div class="dropdown-content {dropdownOpen ? 'show' : ''}">
@@ -128,6 +167,29 @@
     border: none;
     font-weight: 600;
     box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+  }
+
+  .mark-read-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border-color: rgba(99, 102, 241, 0.4);
+  }
+
+  .mark-read-btn:hover {
+    background: rgba(99, 102, 241, 0.2);
+    border-color: rgba(99, 102, 241, 0.65);
+  }
+
+  .sync-btn:disabled {
+    opacity: 0.6;
+    cursor: wait;
+  }
+
+  .sync-meta {
+    font-size: 0.775rem;
+    color: var(--text-muted);
+    margin-left: 0.2rem;
   }
 
   .dropdown {

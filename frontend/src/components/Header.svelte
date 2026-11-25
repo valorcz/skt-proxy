@@ -5,9 +5,7 @@
     appVersion = 'v1.0.0',
     currentUser = '',
     sktUsername = '',
-    unreadCount = 0,
     searchQuery = '',
-    onMarkAllRead = () => {},
     onSearchChange = () => {},
     onClearSearch = () => {},
     onToggleTheme = () => {}
@@ -37,16 +35,6 @@
       {@html ICONS.tracker}
       SkT: {sktUsername}
     </span>
-    {#if unreadCount > 0}
-      <button 
-        class="user-pill mark-read-btn" 
-        onclick={onMarkAllRead} 
-        title="Mark all new items as read"
-      >
-        {@html ICONS.check}
-        Mark all read
-      </button>
-    {/if}
   </div>
 
   <div class="controls">
@@ -142,16 +130,6 @@
     background: rgba(16, 185, 129, 0.12);
     color: #34d399;
     border-color: rgba(16, 185, 129, 0.3);
-  }
-
-  .mark-read-btn {
-    cursor: pointer;
-    border-color: rgba(99, 102, 241, 0.4);
-    transition: var(--transition);
-  }
-
-  .mark-read-btn:hover {
-    background: rgba(99, 102, 241, 0.2);
   }
 
   .controls {

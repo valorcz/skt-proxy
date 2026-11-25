@@ -31,7 +31,6 @@ LOGIN_URL = "https://sktorrent.eu/torrent/login.php?returnto=index.php"
 SYNOLOGY_URL = os.environ.get("SYNOLOGY_URL", "").rstrip("/")
 SYNOLOGY_USER = os.environ.get("SYNOLOGY_USER", "")
 SYNOLOGY_PASSWORD = os.environ.get("SYNOLOGY_PASSWORD", "")
-SYNOLOGY_DSM_VERSION = int(os.environ.get("SYNOLOGY_DSM_VERSION", "7"))
 SYNOLOGY_DESTINATION = os.environ.get("SYNOLOGY_DESTINATION", "")
 SYNOLOGY_VERIFY_SSL = os.environ.get("SYNOLOGY_VERIFY_SSL", "false").lower() in ("true", "1", "yes")
 
@@ -45,13 +44,13 @@ NAS_ALLOWED_EMAILS = [
 # --- APP & RUNTIME DATA PATHS ---
 DATA_DIR = os.environ.get("DATA_DIR", "data")
 CACHE_EXPIRY = int(os.environ.get("CACHE_EXPIRY", "300"))  # seconds (5 min)
+ENABLE_BACKGROUND_SYNC = os.environ.get("ENABLE_BACKGROUND_SYNC", "true").lower() in ("true", "1", "yes")
+BACKGROUND_SYNC_INTERVAL = int(os.environ.get("BACKGROUND_SYNC_INTERVAL", str(CACHE_EXPIRY)))
 PAGE_SIZE = int(os.environ.get("PAGE_SIZE", "40"))
 NEW_FLAG_EXPIRY_SECONDS = int(os.environ.get("NEW_FLAG_EXPIRY_SECONDS", "172800"))  # 48 hours
 
 DB_PATH = os.path.join(DATA_DIR, "cache.db")
 COVERS_DIR = os.path.join(DATA_DIR, "covers")
-DOWNLOADS_DIR = os.path.join(DATA_DIR, "downloads")
 
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(COVERS_DIR, exist_ok=True)
-os.makedirs(DOWNLOADS_DIR, exist_ok=True)

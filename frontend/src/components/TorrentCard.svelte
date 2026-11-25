@@ -1,4 +1,5 @@
 <script>
+  import { onDestroy } from 'svelte';
   import { ICONS } from '../icons.js';
 
   let {
@@ -8,9 +9,15 @@
     onMarkRead = () => {}
   } = $props();
 
-  let nasConfirming = $state(false);
   let nasState = $state('idle'); // 'idle' | 'confirming' | 'sending' | 'sent' | 'error'
+  let nasError = $state('');
   let nasTimer = null;
+  let nasResetTimer = null;
+
+  onDestroy(() => {
+    clearTimeout(nasTimer);
+    clearTimeout(nasResetTimer);
+  });
 
   function getScoreClass(scoreStr) {
     if (!scoreStr) return 'neutral';
@@ -30,8 +37,10 @@
   }
 
   async function handleNasClick() {
-    if (nasState === 'idle') {
+    if (nasState === 'idle' || nasState === 'error') {
+      nasError = '';
       nasState = 'confirming';
+      clearTimeout(nasTimer);
       nasTimer = setTimeout(() => {
         nasState = 'idle';
       }, 3500);
@@ -41,6 +50,7 @@
     if (nasState === 'confirming') {
       clearTimeout(nasTimer);
       nasState = 'sending';
+      nasError = '';
 
       const encodedTitle = torrent.download_link?.includes('&f=') 
         ? torrent.download_link.split('&f=')[1] 
@@ -66,17 +76,19 @@
           nasState = 'sent';
           onMarkRead(torrent.id);
         } else {
-          alert('Failed: ' + (result.error || result.message || `HTTP ${response.status}`));
+          nasError = result.error || result.message || `HTTP ${response.status}`;
           nasState = 'error';
         }
       } catch (err) {
-        alert(err.message || ('Network error: ' + err));
-        nasState = 'idle';
+        nasError = err.message || ('Network error: ' + err);
+        nasState = 'error';
       }
 
-      setTimeout(() => {
+      clearTimeout(nasResetTimer);
+      nasResetTimer = setTimeout(() => {
         nasState = 'idle';
-      }, 3000);
+        nasError = '';
+      }, 4000);
     }
   }
 </script>
@@ -182,7 +194,8 @@
             onclick={handleNasClick} 
             class="btn btn-secondary {nasState === 'confirming' ? 'btn-nas-confirm' : ''}"
             disabled={nasState === 'sending'}
-            style={nasState === 'sent' ? 'border-color: var(--seed-color); color: var(--seed-color);' : ''}
+            title={nasError || undefined}
+            style={nasState === 'sent' ? 'border-color: var(--seed-color); color: var(--seed-color);' : (nasState === 'error' ? 'border-color: var(--leech-color); color: var(--leech-color);' : '')}
           >
             {#if nasState === 'idle'}
               {@html ICONS.nas} NAS
@@ -202,6 +215,9 @@
           </button>
         {/if}
       </div>
+      {#if nasError}
+        <p class="nas-error" role="status">{nasError}</p>
+      {/if}
     </div>
   </div>
 </article>
@@ -351,5 +367,13 @@
     grid-template-columns: 1fr 1fr;
     grid-template-rows: 1fr 1fr;
     gap: 0.35rem;
+  }
+
+  .nas-error {
+    margin: 0.2rem 0 0;
+    font-size: 0.72rem;
+    color: var(--leech-color);
+    line-height: 1.3;
+    word-break: break-word;
   }
 </style>

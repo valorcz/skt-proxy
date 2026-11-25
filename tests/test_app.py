@@ -122,7 +122,8 @@ def test_api_mark_read_endpoint(client, tmp_path):
     with sqlite3.connect(db_file) as conn:
         conn.execute("INSERT INTO torrents (id, title, is_new) VALUES (?, ?, ?)", ("999", "New Movie", True))
     
-    resp = client.post("/api/mark_read", json={"id": "999"})
+    with patch.object(app, "ensure_login", return_value=True):
+        resp = client.post("/api/mark_read", json={"id": "999"})
     assert resp.status_code == 200
     assert resp.get_json()["success"] is True
 
@@ -153,7 +154,8 @@ def test_api_mark_all_read_endpoint(client):
         conn.execute("INSERT INTO torrents (id, title, is_new) VALUES (?, ?, ?)", ("1001", "Movie 1", True))
         conn.execute("INSERT INTO torrents (id, title, is_new) VALUES (?, ?, ?)", ("1002", "Movie 2", True))
 
-    resp = client.post("/api/mark_all_read")
+    with patch.object(app, "ensure_login", return_value=True):
+        resp = client.post("/api/mark_all_read")
     assert resp.status_code == 200
     data = resp.get_json()
     assert data["success"] is True
@@ -165,7 +167,8 @@ def test_api_mark_all_read_endpoint(client):
 
 
 def test_api_sync_status_endpoint(client):
-    resp = client.get("/api/sync_status?category=0")
+    with patch.object(app, "ensure_login", return_value=True):
+        resp = client.get("/api/sync_status?category=0")
     assert resp.status_code == 200
     data = resp.get_json()
     assert "last_synced" in data
@@ -179,17 +182,19 @@ def test_api_torrents_with_new_only(client):
         conn.execute("INSERT INTO torrents (id, title, is_new, added_date) VALUES (?, ?, ?, ?)", ("2001", "Old Film", False, "2026-09-01"))
         conn.execute("INSERT INTO torrents (id, title, is_new, added_date) VALUES (?, ?, ?, ?)", ("2002", "Fresh Film", True, "2026-09-02"))
 
-    resp_all = client.get("/api/torrents?new_only=false")
-    assert resp_all.status_code == 200
-    all_data = resp_all.get_json()
-    assert len(all_data["torrents"]) == 2
-    assert all_data["unread_count"] == 1
+    with patch.object(app, "ensure_login", return_value=True), \
+         patch("skt_proxy.services.scraper.sync_tracker_feed", return_value=0):
+        resp_all = client.get("/api/torrents?new_only=false")
+        assert resp_all.status_code == 200
+        all_data = resp_all.get_json()
+        assert len(all_data["torrents"]) == 2
+        assert all_data["unread_count"] == 1
 
-    resp_new = client.get("/api/torrents?new_only=true")
-    assert resp_new.status_code == 200
-    new_data = resp_new.get_json()
-    assert len(new_data["torrents"]) == 1
-    assert new_data["torrents"][0]["id"] == "2002"
+        resp_new = client.get("/api/torrents?new_only=true")
+        assert resp_new.status_code == 200
+        new_data = resp_new.get_json()
+        assert len(new_data["torrents"]) == 1
+        assert new_data["torrents"][0]["id"] == "2002"
 
 
 def test_api_config_endpoint(client):
@@ -364,3 +369,96 @@ def test_api_torrent_details_persists_databazeknih_url(client):
         matching = [t for t in t_list if t["id"] == "9991"]
         assert len(matching) == 1
         assert matching[0]["databazeknih_url"] == "https://www.databazeknih.cz/knihy/stoparuv-pruvodce-po-galaxii-217"
+
+
+def test_invalid_torrent_id_rejected(client):
+    with patch.object(app, "ensure_login", return_value=True), \
+         patch.object(app, "can_use_nas", return_value=True):
+        assert client.get("/api/cover/..secret").status_code == 400
+        assert client.get("/api/torrent_details?id=bad!id").status_code == 400
+        assert client.get("/proxy_download?id=bad!id&f=file.torrent").status_code == 400
+        assert client.post("/api/send_to_nas", json={"id": "bad!id", "f": "file.torrent"}).status_code == 400
+
+
+def test_global_error_handler_hides_internal_details(client):
+    with patch.object(app, "ensure_login", side_effect=RuntimeError("secret db path /var/data")):
+        resp = client.get("/api/sync_status")
+        assert resp.status_code == 500
+        body = resp.get_json()
+        assert body["error"] == "Internal server error"
+        assert "secret db path" not in body["error"]
+
+
+def test_api_torrents_search_genre_and_has_more(client):
+    db_file = app.DB_PATH
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO torrents (id, title, category_id, genres, is_new, added_date, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("t1", "Dune Part One", "1", json.dumps(["Sci-Fi", "Drama"]), False, "2026-11-25", 3),
+        )
+        conn.execute(
+            "INSERT INTO torrents (id, title, category_id, genres, is_new, added_date, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("t2", "Dune Part Two 100%_test", "1", json.dumps(["Sci-Fi"]), False, "2026-11-25", 2),
+        )
+        conn.execute(
+            "INSERT INTO torrents (id, title, category_id, genres, is_new, added_date, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("t3", "Comedy Special", "1", json.dumps(["Comedy"]), False, "2026-11-25", 1),
+        )
+
+    with patch.object(app, "ensure_login", return_value=True), \
+         patch("skt_proxy.services.scraper.sync_tracker_feed", return_value=0), \
+         patch.object(app.config, "PAGE_SIZE", 1):
+        # Exact page_size + 1 lookahead ensures has_more=True when more items exist, False on last page
+        resp = client.get("/api/torrents?genres=Sci-Fi&page=0")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert [t["id"] for t in data["torrents"]] == ["t1"]
+        assert data["has_more"] is True
+
+        resp2 = client.get("/api/torrents?genres=Sci-Fi&page=1")
+        data2 = resp2.get_json()
+        assert [t["id"] for t in data2["torrents"]] == ["t2"]
+        assert data2["has_more"] is False
+
+        # Escaped LIKE wildcards in ?q= search
+        resp_q = client.get("/api/torrents?q=100%25_test")
+        assert resp_q.status_code == 200
+        assert [t["id"] for t in resp_q.get_json()["torrents"]] == ["t2"]
+
+
+def test_create_app_factory_isolated_config(tmp_path):
+    db_file = str(tmp_path / "factory.db")
+    covers_dir = str(tmp_path / "covers")
+    custom_app = app.create_app({"TESTING": True, "DB_PATH": db_file, "COVERS_DIR": covers_dir})
+    with custom_app.test_client() as custom_client:
+        resp = custom_client.get("/api/categories")
+        assert resp.status_code == 200
+        assert resp.get_json() == []
+    assert os.path.exists(db_file)
+
+
+def test_create_app_starts_background_sync_when_enabled(tmp_path):
+    import threading
+    db_file = str(tmp_path / "bg_app.db")
+    covers_dir = str(tmp_path / "covers")
+    synced = threading.Event()
+
+    def fake_sync(category="0", db_path=None, max_pages=3):
+        synced.set()
+        return 0
+
+    with patch("skt_proxy.services.scraper.sync_tracker_feed", side_effect=fake_sync):
+        custom_app = app.create_app({
+            "TESTING": True,
+            "DB_PATH": db_file,
+            "COVERS_DIR": covers_dir,
+            "ENABLE_BACKGROUND_SYNC": True,
+            "BACKGROUND_SYNC_INTERVAL": 60,
+            "BACKGROUND_SYNC_INITIAL_DELAY": 0,
+        })
+        assert synced.wait(timeout=2.0) is True
+        stop_event = custom_app.extensions["background_sync_stop"]
+        thread = custom_app.extensions["background_sync_thread"]
+        stop_event.set()
+        thread.join(timeout=2.0)
+        assert not thread.is_alive()

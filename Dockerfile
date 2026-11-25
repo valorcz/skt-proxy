@@ -1,8 +1,8 @@
 # Stage 1: Build Svelte 5 SPA
 FROM node:22-alpine AS frontend-builder
 WORKDIR /app/frontend
-COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm ci || npm install
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
 COPY frontend/ ./
 ENV VITE_OUT_DIR=dist
 RUN npm run build

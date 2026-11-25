@@ -3,6 +3,7 @@ import time
 import json
 import sys
 import logging
+from contextlib import contextmanager
 import skt_proxy.config as config
 from skt_proxy.services.logger import setup_logger, log_siem_event
 
@@ -18,11 +19,19 @@ def get_db_path(db_path=None):
     return config.DB_PATH
 
 
+@contextmanager
 def get_db_connection(db_path=None):
     path = get_db_path(db_path)
     conn = sqlite3.connect(path, timeout=20.0)
     conn.execute("PRAGMA busy_timeout = 5000;")
-    return conn
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def init_db(db_path=None):
@@ -35,7 +44,7 @@ def init_db(db_path=None):
                 genres TEXT, size TEXT, added_date TEXT, seeders INTEGER, 
                 leechers INTEGER, download_link TEXT, is_new BOOLEAN, 
                 image_url TEXT, local_image TEXT, csfd_id TEXT, csfd_score TEXT,
-                created_at REAL
+                created_at REAL, databazeknih_url TEXT, sort_order INTEGER
             )
         """
         )
@@ -51,20 +60,18 @@ def init_db(db_path=None):
             conn.execute("ALTER TABLE torrents ADD COLUMN databazeknih_url TEXT")
         except sqlite3.OperationalError:
             pass
+        try:
+            conn.execute("ALTER TABLE torrents ADD COLUMN sort_order INTEGER")
+        except sqlite3.OperationalError:
+            pass
 
         # Indexes for fast pagination, filtering, and unread lookups
         conn.execute("CREATE INDEX IF NOT EXISTS idx_torrents_added_date ON torrents (added_date DESC);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_torrents_sort_order ON torrents (added_date DESC, sort_order DESC);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_torrents_category_id ON torrents (category_id);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_torrents_is_new ON torrents (is_new);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_torrents_created_at ON torrents (created_at);")
 
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS page_cache (
-                cache_key TEXT PRIMARY KEY, last_scraped REAL, torrent_ids TEXT
-            )
-        """
-        )
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS sync_state (

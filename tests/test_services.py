@@ -320,3 +320,240 @@ def test_extract_databazeknih_url():
     """
     soup_plain = BeautifulSoup(html_plain, "html.parser")
     assert extract_databazeknih_url(soup_plain, html_plain) == "https://databazeknih.cz/dalsi-vydani/zaklinac-posledni-prani-23941"
+
+
+def test_sync_preserves_sktorrent_order_across_pages_and_updates(tmp_path):
+    from skt_proxy.services import scraper
+
+    db_file = str(tmp_path / "order_test.db")
+    covers_dir = str(tmp_path / "covers")
+    database.init_db(db_file)
+
+    page0_html = """
+    <html><body>
+        <td>
+            <a href="details.php?name=Newest+Item&id=tid_1">Newest Item</a>
+            Velkost 1 GB | Pridany 25/11/2026 Odosielaju : 10 Stahuju : 1
+        </td>
+        <td>
+            <a href="details.php?name=Second+Item&id=tid_2">Second Item</a>
+            Velkost 2 GB | Pridany 25/11/2026 Odosielaju : 8 Stahuju : 2
+        </td>
+    </body></html>
+    """
+    page1_html = """
+    <html><body>
+        <td>
+            <a href="details.php?name=Third+Item&id=tid_3">Third Item</a>
+            Velkost 3 GB | Pridany 25/11/2026 Odosielaju : 5 Stahuju : 0
+        </td>
+        <td>
+            <a href="details.php?name=Older+Day&id=tid_4">Older Day</a>
+            Velkost 4 GB | Pridany 24/11/2026 Odosielaju : 2 Stahuju : 0
+        </td>
+    </body></html>
+    """
+
+    mock_session = MagicMock()
+    mock_session.get.side_effect = [
+        MagicMock(status_code=200, text=page0_html),
+        MagicMock(status_code=200, text=page1_html),
+    ]
+
+    with patch("skt_proxy.services.scraper.get_http_session", return_value=mock_session), \
+         patch("skt_proxy.services.scraper.ensure_login", return_value=True), \
+         patch("skt_proxy.services.scraper.get_covers_dir", return_value=covers_dir), \
+         patch.object(scraper.background_worker, "submit"):
+        scraper.sync_tracker_feed(category="0", db_path=db_file, max_pages=2)
+
+    with patch("skt_proxy.services.scraper.get_covers_dir", return_value=covers_dir):
+        results = scraper.get_torrents(page=0, db_path=db_file)
+    assert [r["id"] for r in results] == ["tid_1", "tid_2", "tid_3", "tid_4"]
+
+    # Simulate pre-existing enriched metadata on tid_1 and an incremental sync with tid_0 at the top
+    with database.get_db_connection(db_file) as conn:
+        conn.execute(
+            "UPDATE torrents SET local_image = ?, csfd_id = ? WHERE id = ?",
+            ("/static/covers/tid_1.jpg", "12345", "tid_1"),
+        )
+
+    incremental_html = """
+    <html><body>
+        <td>
+            <a href="details.php?name=Brand+New+Top&id=tid_0">Brand New Top</a>
+            Velkost 1.5 GB | Pridany 25/11/2026 Odosielaju : 20 Stahuju : 5
+        </td>
+        <td>
+            <a href="details.php?name=Newest+Item&id=tid_1">Newest Item</a>
+            Velkost 1 GB | Pridany 25/11/2026 Odosielaju : 15 Stahuju : 1
+        </td>
+    </body></html>
+    """
+    mock_session2 = MagicMock()
+    mock_session2.get.return_value = MagicMock(status_code=200, text=incremental_html)
+
+    with patch("skt_proxy.services.scraper.get_http_session", return_value=mock_session2), \
+         patch("skt_proxy.services.scraper.ensure_login", return_value=True), \
+         patch("skt_proxy.services.scraper.get_covers_dir", return_value=covers_dir), \
+         patch.object(scraper.background_worker, "submit"):
+        new_count = scraper.sync_tracker_feed(category="0", db_path=db_file, max_pages=2)
+
+    assert new_count == 1
+    with patch("skt_proxy.services.scraper.get_covers_dir", return_value=covers_dir):
+        updated_results = scraper.get_torrents(page=0, db_path=db_file)
+    assert [r["id"] for r in updated_results] == ["tid_0", "tid_1", "tid_2", "tid_3", "tid_4"]
+
+    # Verify tid_1 retained its enriched columns & got updated seeders via ON CONFLICT DO UPDATE
+    tid_1 = next(r for r in updated_results if r["id"] == "tid_1")
+    assert tid_1["seeders"] == 15
+    assert tid_1["local_image"] == "/static/covers/tid_1.jpg"
+    assert tid_1["csfd_id"] == "12345"
+    assert tid_1["is_new"] == 0
+
+
+def test_parse_skt_details_sanitizes_urls():
+    html = """
+    <html><body>
+        <a href="javascript:alert(1)//csfd.cz/film/123">Bad CSFD</a>
+        <a href="https://www.imdb.com/title/tt1234567/">IMDb</a>
+        <iframe src="https://evil.example/embed?youtube.com"></iframe>
+    </body></html>
+    """
+    details = parse_skt_details_html(html, tid="123")
+    assert details["csfd_url"] == ""
+    assert details["imdb_url"] == "https://www.imdb.com/title/tt1234567/"
+    assert details["trailer_url"] == ""
+
+    html_yt = """
+    <html><body>
+        <iframe src="http://www.youtube.com/embed/dQw4w9WgXcQ"></iframe>
+    </body></html>
+    """
+    details_yt = parse_skt_details_html(html_yt, tid="124")
+    assert details_yt["trailer_url"] == "https://www.youtube.com/embed/dQw4w9WgXcQ"
+
+
+def test_http_client_shared_cookies_and_reauth():
+    import requests
+    from skt_proxy.services import http_client
+
+    http_client._shared_cookies.clear()
+
+    s1 = requests.Session()
+    s2 = requests.Session()
+
+    login_calls = 0
+
+    def fake_post(url, data=None, timeout=10):
+        nonlocal login_calls
+        login_calls += 1
+        s1.cookies.set("uid", "42")
+        s1.cookies.set("pass", "secret")
+        return MagicMock(status_code=200)
+
+    with patch.object(http_client.config, "SKT_USERNAME", "user"), \
+         patch.object(http_client.config, "SKT_PASSWORD", "pwd"), \
+         patch.object(s1, "post", side_effect=fake_post):
+        assert http_client.ensure_login(s1) is True
+        # Second session reuses shared cookies without another login POST
+        assert http_client.ensure_login(s2) is True
+        assert login_calls == 1
+        assert s2.cookies.get_dict().get("uid") == "42"
+
+    # Simulate expired session response (login.php redirect) triggering one re-auth retry
+    get_calls = 0
+
+    def fake_s2_get(url, **kwargs):
+        nonlocal get_calls
+        get_calls += 1
+        if get_calls == 1:
+            return MagicMock(status_code=200, url="https://sktorrent.eu/torrent/login.php", text="")
+        return MagicMock(status_code=200, url=url, text="ok")
+
+    def fake_s2_post(url, data=None, timeout=10):
+        s2.cookies.set("uid", "42")
+        s2.cookies.set("pass", "refreshed")
+        return MagicMock(status_code=200)
+
+    with patch.object(http_client.config, "SKT_USERNAME", "user"), \
+         patch.object(http_client.config, "SKT_PASSWORD", "pwd"), \
+         patch.object(s2, "get", side_effect=fake_s2_get), \
+         patch.object(s2, "post", side_effect=fake_s2_post):
+        resp = http_client.skt_get("https://sktorrent.eu/torrent/torrents_v2.php", session=s2)
+        assert resp.text == "ok"
+        assert get_calls == 2
+        assert s2.cookies.get_dict().get("pass") == "refreshed"
+
+    http_client._shared_cookies.clear()
+
+
+def test_torrent_bytes_to_magnet_ignores_pieces_and_reads_announce_list():
+    # Binary pieces contains a deceptive "https://fake.invalid" string that must NOT be parsed as a tracker
+    pieces_bytes = b"https://fake.invalid"
+    info = (
+        f"4:infod4:name4:test6:lengthi10e12:piece lengthi16384e6:pieces{len(pieces_bytes)}:".encode("utf-8")
+        + pieces_bytes
+        + b"e"
+    )
+    tr1 = b"https://tr1.example/announce"
+    tr2 = b"udp://tr2.example:6969"
+    torrent_bytes = (
+        b"d"
+        + f"8:announce{len(tr1)}:".encode("utf-8") + tr1
+        + b"13:announce-listll"
+        + f"{len(tr1)}:".encode("utf-8") + tr1
+        + b"el"
+        + f"{len(tr2)}:".encode("utf-8") + tr2
+        + b"ee"
+        + info
+        + b"e"
+    )
+    magnet = torrent_bytes_to_magnet(torrent_bytes)
+    assert magnet is not None
+    assert "tr1.example" in magnet
+    assert "tr2.example" in magnet
+    assert "fake.invalid" not in magnet
+
+
+def test_background_sync_loop_runs_and_stops_cleanly(tmp_path):
+    import threading
+    import time
+    from skt_proxy.services import scraper
+
+    db_file = str(tmp_path / "bg_loop.db")
+    database.init_db(db_file)
+
+    called = threading.Event()
+    calls = []
+
+    def fake_sync(category="0", db_path=None, max_pages=3):
+        calls.append((category, db_path))
+        database.update_sync_state(category, time.time(), 0, db_path)
+        called.set()
+        return 0
+
+    with patch("skt_proxy.services.scraper.sync_tracker_feed", side_effect=fake_sync):
+        thread, stop_event = scraper.start_background_sync_loop(
+            db_path=db_file,
+            interval_seconds=60,
+            initial_delay_seconds=0,
+        )
+        assert called.wait(timeout=2.0) is True
+        stop_event.set()
+        thread.join(timeout=2.0)
+        assert not thread.is_alive()
+
+    assert calls == [("0", db_file)]
+
+    # If last_synced is already fresh, loop should skip calling sync_tracker_feed
+    with patch("skt_proxy.services.scraper.sync_tracker_feed") as mock_sync:
+        thread2, stop_event2 = scraper.start_background_sync_loop(
+            db_path=db_file,
+            interval_seconds=60,
+            initial_delay_seconds=0,
+        )
+        # Wait briefly via join after immediate stop after a tiny yield
+        time.sleep(0.05)
+        stop_event2.set()
+        thread2.join(timeout=2.0)
+        mock_sync.assert_not_called()

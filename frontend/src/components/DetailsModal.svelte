@@ -13,17 +13,19 @@
 
   $effect(() => {
     if (torrentId) {
-      loadDetails(torrentId);
+      const controller = new AbortController();
+      loadDetails(torrentId, controller.signal);
+      return () => controller.abort();
     }
   });
 
-  async function loadDetails(id) {
+  async function loadDetails(id, signal) {
     loading = true;
     error = null;
     details = null;
 
     try {
-      const res = await fetch(`/api/torrent_details?id=${id}`);
+      const res = await fetch(`/api/torrent_details?id=${encodeURIComponent(id)}`, { signal });
       const data = await res.json();
       if (!res.ok || data.error) {
         error = data.error || 'Unknown error';
@@ -31,9 +33,12 @@
         details = data;
       }
     } catch (err) {
+      if (err.name === 'AbortError') return;
       error = err.message || 'Network error';
     } finally {
-      loading = false;
+      if (!signal?.aborted) {
+        loading = false;
+      }
     }
   }
 

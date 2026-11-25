@@ -6,6 +6,40 @@ from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
+ALLOWED_YOUTUBE_HOSTS = {
+    "youtube.com",
+    "www.youtube.com",
+    "youtube-nocookie.com",
+    "www.youtube-nocookie.com",
+}
+
+
+def sanitize_http_url(url: str) -> str:
+    """Returns url only if it uses an explicit http or https scheme with a valid host."""
+    if not url:
+        return ""
+    candidate = url.strip()
+    if candidate.startswith("//"):
+        candidate = "https:" + candidate
+    parsed = urllib.parse.urlparse(candidate)
+    if parsed.scheme in ("http", "https") and parsed.netloc:
+        return candidate
+    return ""
+
+
+def sanitize_youtube_embed_url(url: str) -> str:
+    """Returns a safe https:// YouTube embed URL if the host is allowlisted, else ''."""
+    candidate = sanitize_http_url(url)
+    if not candidate:
+        return ""
+    parsed = urllib.parse.urlparse(candidate)
+    host = (parsed.hostname or "").lower()
+    if host not in ALLOWED_YOUTUBE_HOSTS:
+        return ""
+    if parsed.scheme == "http":
+        return parsed._replace(scheme="https").geturl()
+    return candidate
+
 
 def extract_csfd_score(*texts):
     for text in texts:
@@ -80,73 +114,85 @@ def parse_languages(text):
     return sorted(list(found))
 
 
+def _bdecode_next(data: bytes, idx: int, track_info: bool = False):
+    """
+    Decodes a single bencoded value starting at data[idx].
+    Returns (value, next_idx, info_span) where info_span is (start, end) of top-level b'info' bytes.
+    """
+    if idx >= len(data):
+        raise ValueError("Unexpected end of bencoded data")
+
+    token = data[idx:idx + 1]
+    if token == b"i":
+        end = data.index(b"e", idx + 1)
+        return int(data[idx + 1:end]), end + 1, None
+
+    if token == b"l":
+        items = []
+        pos = idx + 1
+        while data[pos:pos + 1] != b"e":
+            val, pos, _ = _bdecode_next(data, pos)
+            items.append(val)
+        return items, pos + 1, None
+
+    if token == b"d":
+        mapping = {}
+        info_span = None
+        pos = idx + 1
+        while data[pos:pos + 1] != b"e":
+            key, pos, _ = _bdecode_next(data, pos)
+            val_start = pos
+            val, pos, _ = _bdecode_next(data, pos)
+            if track_info and key == b"info" and isinstance(val, dict):
+                info_span = (val_start, pos)
+            mapping[key] = val
+        return mapping, pos + 1, info_span
+
+    if token.isdigit():
+        colon = data.index(b":", idx)
+        length = int(data[idx:colon])
+        start = colon + 1
+        end = start + length
+        if end > len(data):
+            raise ValueError("Bencoded string exceeds buffer length")
+        return data[start:end], end, None
+
+    raise ValueError(f"Invalid bencode token at offset {idx}: {token!r}")
+
+
 def torrent_bytes_to_magnet(file_bytes):
     """
     Extracts infohash, title, and all tracker URLs from raw .torrent file bytes and builds a magnet URI.
     """
     try:
-        info_start = file_bytes.find(b"4:info")
-        if info_start == -1:
-            return None
-        dict_start = info_start + 6
-        if file_bytes[dict_start:dict_start + 1] != b"d":
+        decoded, _, info_span = _bdecode_next(file_bytes, 0, track_info=True)
+        if not isinstance(decoded, dict) or not info_span:
             return None
 
-        depth = 0
-        i = dict_start
-        while i < len(file_bytes):
-            char = file_bytes[i:i + 1]
-            if char in (b"d", b"l"):
-                depth += 1
-                i += 1
-            elif char == b"e":
-                depth -= 1
-                i += 1
-                if depth == 0:
-                    break
-            elif char.isdigit():
-                colon = file_bytes.find(b":", i)
-                if colon == -1:
-                    break
-                length = int(file_bytes[i:colon])
-                i = colon + 1 + length
-            elif char == b"i":
-                e_pos = file_bytes.find(b"e", i)
-                if e_pos == -1:
-                    break
-                i = e_pos + 1
-            else:
-                i += 1
-
-        info_bytes = file_bytes[dict_start:i]
+        info_bytes = file_bytes[info_span[0]:info_span[1]]
         infohash = hashlib.sha1(info_bytes).hexdigest()
 
-        name_match = re.search(rb"4:name(\d+):", info_bytes)
-        name_str = ""
-        if name_match:
-            try:
-                nl = int(name_match.group(1))
-                ns = name_match.end()
-                name_str = info_bytes[ns:ns + nl].decode("utf-8", errors="ignore")
-            except Exception:
-                pass
+        info_dict = decoded.get(b"info", {})
+        raw_name = info_dict.get(b"name.utf-8") or info_dict.get(b"name")
+        name_str = raw_name.decode("utf-8", errors="ignore") if isinstance(raw_name, bytes) else ""
 
         trackers = []
-        for m in re.finditer(rb'(https?://[^\s\"\'<>]+|udp://[^\s\"\'<>]+)', file_bytes):
-            start = m.start(1)
-            if start > 0 and file_bytes[start - 1:start] == b':':
-                digits_end = start - 1
-                digits_start = digits_end
-                while digits_start > 0 and file_bytes[digits_start - 1:digits_start].isdigit():
-                    digits_start -= 1
-                if digits_start < digits_end:
-                    try:
-                        length = int(file_bytes[digits_start:digits_end])
-                        tr_url = file_bytes[start:start + length].decode("utf-8", errors="ignore")
-                        if tr_url.startswith(("http://", "https://", "udp://")) and tr_url not in trackers:
-                            trackers.append(tr_url)
-                    except Exception:
-                        pass
+
+        def _add_tracker(raw_url):
+            if isinstance(raw_url, bytes):
+                tr_url = raw_url.decode("utf-8", errors="ignore").strip()
+                if tr_url.startswith(("http://", "https://", "udp://")) and tr_url not in trackers:
+                    trackers.append(tr_url)
+
+        _add_tracker(decoded.get(b"announce"))
+        announce_list = decoded.get(b"announce-list")
+        if isinstance(announce_list, list):
+            for tier in announce_list:
+                if isinstance(tier, list):
+                    for item in tier:
+                        _add_tracker(item)
+                else:
+                    _add_tracker(tier)
 
         magnet = f"magnet:?xt=urn:btih:{infohash}"
         if name_str:
@@ -618,23 +664,22 @@ def parse_skt_details_html(html_text, category="", tid=""):
     # External Links
     csfd_link = soup.find("a", href=re.compile(r"csfd\.cz/film/"))
     if csfd_link and csfd_link.get("href"):
-        details["csfd_url"] = csfd_link["href"]
-        m = re.search(r"csfd\.cz/film/(\d+)", csfd_link["href"])
-        if m:
-            details["csfd_id"] = m.group(1)
+        safe_csfd = sanitize_http_url(csfd_link["href"])
+        if safe_csfd:
+            details["csfd_url"] = safe_csfd
+            m = re.search(r"csfd\.cz/film/(\d+)", safe_csfd)
+            if m:
+                details["csfd_id"] = m.group(1)
 
-    details["databazeknih_url"] = extract_databazeknih_url(soup, html_text)
+    details["databazeknih_url"] = sanitize_http_url(extract_databazeknih_url(soup, html_text))
 
     imdb_link = soup.find("a", href=re.compile(r"imdb\.com/title/"))
     if imdb_link and imdb_link.get("href"):
-        details["imdb_url"] = imdb_link["href"]
+        details["imdb_url"] = sanitize_http_url(imdb_link["href"])
 
     poster_img = soup.find("img", src=re.compile(r"cdn\.sktorrent\.eu/obrazky/"))
     if poster_img and poster_img.get("src"):
-        src = poster_img["src"]
-        if src.startswith("//"):
-            src = "https:" + src
-        details["poster_url"] = src
+        details["poster_url"] = sanitize_http_url(poster_img["src"])
 
     mediainfo_div = (
         soup.find("div", {"id": re.compile(r"filesMediainfo", re.I)}) or
@@ -648,9 +693,9 @@ def parse_skt_details_html(html_text, category="", tid=""):
         ]
         details["mediainfo_text"] = "\n".join(clean_mi_lines).strip()
 
-    iframe = soup.find("iframe", src=re.compile(r"youtube\.com"))
+    iframe = soup.find("iframe", src=re.compile(r"youtube(?:-nocookie)?\.com"))
     if iframe and iframe.get("src"):
-        details["trailer_url"] = iframe["src"]
+        details["trailer_url"] = sanitize_youtube_embed_url(iframe["src"])
 
     for tr in soup.find_all("tr"):
         tds = tr.find_all("td")

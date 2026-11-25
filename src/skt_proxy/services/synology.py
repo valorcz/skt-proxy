@@ -136,7 +136,7 @@ def push_to_synology(file_bytes, filename):
             )
             return True, "Task added successfully"
 
-        code = result.get("error", {}).get("code", "Unknown")
+        code = (result_get or result or {}).get("error", {}).get("code", "Unknown")
         log_siem_event(
             logger,
             logging.ERROR,
